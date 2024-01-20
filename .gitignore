@@ -2,8 +2,7 @@
 .DS_Store
 certs
 passes
-Test.pass
-template/footer.png
+TestData
 tmp
 certificates
 .env
