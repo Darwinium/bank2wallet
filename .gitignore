@@ -5,3 +5,5 @@ passes
 Test.pass
 template/footer.png
 tmp
+certificates
+.env

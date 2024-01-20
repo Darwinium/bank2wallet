@@ -12,6 +12,8 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/joho/godotenv"
 )
 
 // PassData represents the data structure for pass.json
@@ -240,14 +242,29 @@ func copyImages(srcDir, dstDir string) (map[string]string, error) {
 }
 
 func signingPass(passName string) (string, error) {
-	cmd := exec.Command("./signpass", "-p", "./tmp/"+passName+".pass", "-o", "./passes/"+passName+".pkpass")
-	err := cmd.Run()
+	// cmd := exec.Command("./signpass", "-p", "./tmp/"+passName+".pass", "-o", "./passes/"+passName+".pkpass")
+	// err := cmd.Run()
+	// if err != nil {
+	// 	log.Println("Error executing command: ", err)
+	// 	return "", err
+	// }
+	// log.Printf("Signing of the pass %s executed successfully\n", passName)
+	// return passName + ".pkpass", nil
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+	CERT_PASSWORD := os.Getenv("CERT_PASSWORD")
+
+	cmd := exec.Command("openssl", "smime", "-binary", "-sign", "-certfile", "./certificates/WWDR.pem", "-signer", "./certificates/passcertificate.pem", "-inkey", "./certificates/passkey.pem", "-in", "./tmp/"+passName+".pass/manifest.json", "-out", "./tmp/"+passName+".pass/signature", "-outform", "DER", "-passin", "pass:"+CERT_PASSWORD)
+	err = cmd.Run()
 	if err != nil {
 		log.Println("Error executing command: ", err)
 		return "", err
 	}
 	log.Printf("Signing of the pass %s executed successfully\n", passName)
 	return passName + ".pkpass", nil
+
 }
 
 // sha1Hash returns the SHA1 hash of the given data as a hex string
