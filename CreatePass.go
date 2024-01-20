@@ -6,6 +6,7 @@ import (
 	"io"
 	"log"
 	"os"
+	"os/exec"
 	"path/filepath"
 )
 
@@ -110,10 +111,10 @@ func CreatePass() error {
 		},
 	}
 
-	passName := "Ivo_Dimitrov" + ".pass"
+	passName := "Ivo_Dimitrov"
 
 	// Directories and files to create
-	dirs := []string{passName}
+	dirs := []string{passName + ".pass"}
 	// files := []string{"icon.png", "logo.png", "strip.png"}
 
 	// Create directories
@@ -128,15 +129,26 @@ func CreatePass() error {
 	if err != nil {
 		return fmt.Errorf("error marshalling pass.json: %v", err)
 	}
-	passFilePath := "./tmp/" + passName + "/pass.json"
+	passFilePath := "./tmp/" + passName + ".pass" + "/pass.json"
 	if err := os.WriteFile(passFilePath, passJSON, 0644); err != nil {
 		return fmt.Errorf("error writing pass.json: %v", err)
 	}
 
 	// Move images from template directory to pass directory
-	err = copyImages("./template", "./tmp/"+passName)
+	err = copyImages("./template", "./tmp/"+passName+".pass")
 	if err != nil {
 		log.Printf("error copying images: %v", err)
+	}
+
+	//Sign the pass
+	err = signingPass(passName)
+	if err != nil {
+		log.Printf("error signing pass: %v", err)
+	}
+
+	err = os.RemoveAll("./tmp/" + passName + ".pass")
+	if err != nil {
+		log.Printf("error removing tmp directory: %v", err)
 	}
 
 	return nil
@@ -181,5 +193,16 @@ func copyImages(srcDir, dstDir string) error {
 		}
 	}
 
+	return nil
+}
+
+func signingPass(passName string) error {
+	cmd := exec.Command("./signpass", "-p", "./tmp/"+passName+".pass", "-o", "./passes/"+passName+".pkpass")
+	err := cmd.Run()
+	if err != nil {
+		log.Println("Error executing command: ", err)
+		return err
+	}
+	log.Printf("Signing of the pass %s executed successfully\n", passName)
 	return nil
 }
