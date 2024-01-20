@@ -158,9 +158,14 @@ func CreatePass(plan, companyName, iban, bic, address string) (string, error) {
 	}
 
 	//Sign the pass
-	pkpassName, err := signingPass(passName)
+	err = signingPass(passName)
 	if err != nil {
 		return "", fmt.Errorf("error signing pass: %v", err)
+	}
+
+	pkpassName, err := createPKPass(passName)
+	if err != nil {
+		return "", fmt.Errorf("error creating pkpass: %v", err)
 	}
 
 	// err = os.RemoveAll("./tmp/" + passName + ".pass")
@@ -241,15 +246,7 @@ func copyImages(srcDir, dstDir string) (map[string]string, error) {
 	return manifest, nil
 }
 
-func signingPass(passName string) (string, error) {
-	// cmd := exec.Command("./signpass", "-p", "./tmp/"+passName+".pass", "-o", "./passes/"+passName+".pkpass")
-	// err := cmd.Run()
-	// if err != nil {
-	// 	log.Println("Error executing command: ", err)
-	// 	return "", err
-	// }
-	// log.Printf("Signing of the pass %s executed successfully\n", passName)
-	// return passName + ".pkpass", nil
+func signingPass(passName string) error {
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatal("Error loading .env file")
@@ -260,11 +257,30 @@ func signingPass(passName string) (string, error) {
 	err = cmd.Run()
 	if err != nil {
 		log.Println("Error executing command: ", err)
-		return "", err
+		return err
 	}
 	log.Printf("Signing of the pass %s executed successfully\n", passName)
-	return passName + ".pkpass", nil
+	return nil
 
+}
+
+func createPKPass(passName string) (string, error) {
+	// cmd := exec.Command("zip", "-r", "./passes/"+passName+".pkpass", "./tmp/"+passName+".pass")
+	// Change working directory
+	err := os.Chdir("./tmp/" + passName + ".pass")
+	if err != nil {
+		log.Fatalf("os.Chdir() failed with %s\n", err)
+		return "", err
+	}
+
+	cmd := exec.Command("zip", "-r", "../../passes/"+passName+".pkpass", ".")
+	err = cmd.Run()
+	if err != nil {
+		log.Println("Error executing command: ", err)
+		return "", err
+	}
+	log.Printf("Creation of the pkpass %s executed successfully\n", passName)
+	return passName + ".pkpass", nil
 }
 
 // sha1Hash returns the SHA1 hash of the given data as a hex string
