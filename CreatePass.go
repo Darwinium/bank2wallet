@@ -8,6 +8,8 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"regexp"
+	"strings"
 )
 
 // PassData represents the data structure for pass.json
@@ -49,7 +51,7 @@ type PassData struct {
 }
 
 // CreatePass generates the necessary directories and files for a pass
-func CreatePass() error {
+func CreatePass(plan, companyName, iban, bic, address string) (string, error) {
 	pass := PassData{
 		FormatVersion:       1,
 		PassTypeIdentifier:  "pass.com.finom.bank2wallet",
@@ -68,32 +70,32 @@ func CreatePass() error {
 				{
 					Key:   "plan",
 					Label: "PLAN",
-					Value: "Premium",
+					Value: plan,
 				},
 			},
 			PrimaryFields: []Field{
 				{
 					Key:   "company-name",
-					Value: "Ivo Dimitrov",
+					Value: companyName,
 				},
 			},
 			SecondaryFields: []Field{
 				{
 					Key:   "iban",
 					Label: "IBAN",
-					Value: "NL24 FNOM 0698 9885 95",
+					Value: iban,
 				},
 				{
 					Key:   "bic",
 					Label: "BIC",
-					Value: "FNOMNL22",
+					Value: bic,
 				},
 			},
 			AuxiliaryFields: []Field{
 				{
 					Key:   "address",
 					Label: "ADDRESS",
-					Value: "Kastanienallee 102, 10435, Berlin, Germany",
+					Value: address,
 				},
 			},
 			BackFields: []Field{
@@ -106,44 +108,43 @@ func CreatePass() error {
 		},
 		Barcode: Barcode{
 			Format:          "PKBarcodeFormatQR",
-			Message:         "BCD\n001\n1\nSCT\nFNOMNL22\nIvo Dimitrov\nNL24FNOM0698988595",
+			Message:         "BCD\n001\n1\nSCT\n" + bic + "\n" + companyName + "\n" + iban,
 			MessageEncoding: "iso-8859-1",
 		},
 	}
 
-	passName := "Ivo_Dimitrov"
+	passName := sanitizeCompanyName(companyName)
 
 	// Directories and files to create
 	dirs := []string{passName + ".pass"}
-	// files := []string{"icon.png", "logo.png", "strip.png"}
 
 	// Create directories
 	for _, dir := range dirs {
 		if err := os.MkdirAll("./tmp/"+dir, 0755); err != nil {
-			return fmt.Errorf("error creating directory %s: %v", dir, err)
+			return "", fmt.Errorf("error creating directory %s: %v", dir, err)
 		}
 	}
 
 	// Create pass.json
 	passJSON, err := json.MarshalIndent(pass, "", " ")
 	if err != nil {
-		return fmt.Errorf("error marshalling pass.json: %v", err)
+		return "", fmt.Errorf("error marshalling pass.json: %v", err)
 	}
 	passFilePath := "./tmp/" + passName + ".pass" + "/pass.json"
 	if err := os.WriteFile(passFilePath, passJSON, 0644); err != nil {
-		return fmt.Errorf("error writing pass.json: %v", err)
+		return "", fmt.Errorf("error writing pass.json: %v", err)
 	}
 
 	// Move images from template directory to pass directory
 	err = copyImages("./template", "./tmp/"+passName+".pass")
 	if err != nil {
-		log.Printf("error copying images: %v", err)
+		return "", fmt.Errorf("error copying images: %v", err)
 	}
 
 	//Sign the pass
-	err = signingPass(passName)
+	pkpassName, err := signingPass(passName)
 	if err != nil {
-		log.Printf("error signing pass: %v", err)
+		return "", fmt.Errorf("error signing pass: %v", err)
 	}
 
 	err = os.RemoveAll("./tmp/" + passName + ".pass")
@@ -151,7 +152,23 @@ func CreatePass() error {
 		log.Printf("error removing tmp directory: %v", err)
 	}
 
-	return nil
+	return pkpassName, nil
+}
+
+func sanitizeCompanyName(companyName string) string {
+	// Remove all non-alphanumeric characters.
+	reg, _ := regexp.Compile("[^a-zA-Z0-9]+")
+	sanitized := reg.ReplaceAllString(companyName, "")
+
+	// Remove spaces.
+	sanitized = strings.ReplaceAll(sanitized, " ", "_")
+
+	// Truncate to 15 characters.
+	if len(sanitized) > 15 {
+		sanitized = sanitized[:15]
+	}
+
+	return sanitized
 }
 
 func copyImages(srcDir, dstDir string) error {
@@ -196,13 +213,13 @@ func copyImages(srcDir, dstDir string) error {
 	return nil
 }
 
-func signingPass(passName string) error {
+func signingPass(passName string) (string, error) {
 	cmd := exec.Command("./signpass", "-p", "./tmp/"+passName+".pass", "-o", "./passes/"+passName+".pkpass")
 	err := cmd.Run()
 	if err != nil {
 		log.Println("Error executing command: ", err)
-		return err
+		return "", err
 	}
 	log.Printf("Signing of the pass %s executed successfully\n", passName)
-	return nil
+	return passName + ".pkpass", nil
 }
