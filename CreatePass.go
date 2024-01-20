@@ -1,6 +1,8 @@
 package main
 
 import (
+	"crypto/sha1"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -117,6 +119,7 @@ func CreatePass(plan, companyName, iban, bic, address string) (string, error) {
 
 	// Directories and files to create
 	dirs := []string{passName + ".pass"}
+	manifest := make(map[string]string)
 
 	// Create directories
 	for _, dir := range dirs {
@@ -134,11 +137,22 @@ func CreatePass(plan, companyName, iban, bic, address string) (string, error) {
 	if err := os.WriteFile(passFilePath, passJSON, 0644); err != nil {
 		return "", fmt.Errorf("error writing pass.json: %v", err)
 	}
+	manifest["pass.json"] = sha1Hash(passJSON)
 
 	// Move images from template directory to pass directory
-	err = copyImages("./template", "./tmp/"+passName+".pass")
+	imageManifest, err := copyImages("./template", "./tmp/"+passName+".pass")
 	if err != nil {
 		return "", fmt.Errorf("error copying images: %v", err)
+	}
+
+	manifest = mergeMaps(manifest, imageManifest)
+	// Create manifest.json
+	manifestJSON, err := json.MarshalIndent(manifest, "", " ")
+	if err != nil {
+		return "", fmt.Errorf("error marshalling manifest.json: %v", err)
+	}
+	if err := os.WriteFile("./tmp/"+passName+".pass/manifest.json", manifestJSON, 0644); err != nil {
+		return "", fmt.Errorf("error writing manifest.json: %v", err)
 	}
 
 	//Sign the pass
@@ -147,10 +161,10 @@ func CreatePass(plan, companyName, iban, bic, address string) (string, error) {
 		return "", fmt.Errorf("error signing pass: %v", err)
 	}
 
-	err = os.RemoveAll("./tmp/" + passName + ".pass")
-	if err != nil {
-		log.Printf("error removing tmp directory: %v", err)
-	}
+	// err = os.RemoveAll("./tmp/" + passName + ".pass")
+	// if err != nil {
+	// 	log.Printf("error removing tmp directory: %v", err)
+	// }
 
 	return pkpassName, nil
 }
@@ -171,17 +185,20 @@ func sanitizeCompanyName(companyName string) string {
 	return sanitized
 }
 
-func copyImages(srcDir, dstDir string) error {
+func copyImages(srcDir, dstDir string) (map[string]string, error) {
 	// Ensure destination directory exists.
 	if err := os.MkdirAll(dstDir, 0755); err != nil {
-		return err
+		return nil, err
 	}
 
 	// Get list of files in source directory.
 	files, err := os.ReadDir(srcDir)
 	if err != nil {
-		return err
+		return nil, err
 	}
+
+	// Manifest for images
+	manifest := make(map[string]string)
 
 	// Iterate over each file.
 	for _, file := range files {
@@ -193,24 +210,33 @@ func copyImages(srcDir, dstDir string) error {
 		// Open source file.
 		srcFile, err := os.Open(filepath.Join(srcDir, file.Name()))
 		if err != nil {
-			return err
+			return nil, err
 		}
 		defer srcFile.Close()
 
 		// Create destination file.
-		dstFile, err := os.Create(filepath.Join(dstDir, file.Name()))
+		newFilePath := filepath.Join(dstDir, file.Name())
+		dstFile, err := os.Create(newFilePath)
 		if err != nil {
-			return err
+			return nil, err
 		}
 		defer dstFile.Close()
 
 		// Copy content from source file to destination file.
 		if _, err := io.Copy(dstFile, srcFile); err != nil {
-			return err
+			return nil, err
 		}
+
+		// Read the content of the destination file.
+		dstContent, err := os.ReadFile(newFilePath)
+		if err != nil {
+			return nil, err
+		}
+
+		manifest[file.Name()] = sha1Hash(dstContent)
 	}
 
-	return nil
+	return manifest, nil
 }
 
 func signingPass(passName string) (string, error) {
@@ -222,4 +248,22 @@ func signingPass(passName string) (string, error) {
 	}
 	log.Printf("Signing of the pass %s executed successfully\n", passName)
 	return passName + ".pkpass", nil
+}
+
+// sha1Hash returns the SHA1 hash of the given data as a hex string
+func sha1Hash(data []byte) string {
+	hash := sha1.New()
+	hash.Write(data)
+	return hex.EncodeToString(hash.Sum(nil))
+}
+
+func mergeMaps(m1 map[string]string, m2 map[string]string) map[string]string {
+	merged := make(map[string]string)
+	for k, v := range m1 {
+		merged[k] = v
+	}
+	for key, value := range m2 {
+		merged[key] = value
+	}
+	return merged
 }
