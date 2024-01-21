@@ -14,7 +14,7 @@ func main() {
 	serverURL := "0.0.0.0:" + *port
 
 	r := gin.Default()
-	r.StaticFS("/passes", gin.Dir("./passes", false))
+	r.StaticFS("/passes", gin.Dir("./b2wData/passes", false))
 
 	r.GET("/test", func(c *gin.Context) {
 		pkpassName, err := CreatePass(

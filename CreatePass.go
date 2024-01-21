@@ -125,7 +125,7 @@ func CreatePass(plan, companyName, iban, bic, address string) (string, error) {
 
 	// Create directories
 	for _, dir := range dirs {
-		if err := os.MkdirAll("./tmp/"+dir, 0755); err != nil {
+		if err := os.MkdirAll("./b2wData/tmp/"+dir, 0755); err != nil {
 			return "", fmt.Errorf("error creating directory %s: %v", dir, err)
 		}
 	}
@@ -135,14 +135,14 @@ func CreatePass(plan, companyName, iban, bic, address string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("error marshalling pass.json: %v", err)
 	}
-	passFilePath := "./tmp/" + passName + ".pass" + "/pass.json"
+	passFilePath := "./b2wData/tmp/" + passName + ".pass" + "/pass.json"
 	if err := os.WriteFile(passFilePath, passJSON, 0644); err != nil {
 		return "", fmt.Errorf("error writing pass.json: %v", err)
 	}
 	manifest["pass.json"] = sha1Hash(passJSON)
 
 	// Move images from template directory to pass directory
-	imageManifest, err := copyImages("./template", "./tmp/"+passName+".pass")
+	imageManifest, err := copyImages("./template", "./b2wData/tmp/"+passName+".pass")
 	if err != nil {
 		return "", fmt.Errorf("error copying images: %v", err)
 	}
@@ -153,7 +153,7 @@ func CreatePass(plan, companyName, iban, bic, address string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("error marshalling manifest.json: %v", err)
 	}
-	if err := os.WriteFile("./tmp/"+passName+".pass/manifest.json", manifestJSON, 0644); err != nil {
+	if err := os.WriteFile("./b2wData/tmp/"+passName+".pass/manifest.json", manifestJSON, 0644); err != nil {
 		return "", fmt.Errorf("error writing manifest.json: %v", err)
 	}
 
@@ -168,7 +168,7 @@ func CreatePass(plan, companyName, iban, bic, address string) (string, error) {
 		return "", fmt.Errorf("error creating pkpass: %v", err)
 	}
 
-	// err = os.RemoveAll("./tmp/" + passName + ".pass")
+	// err = os.RemoveAll("./b2wData/tmp/" + passName + ".pass")
 	// if err != nil {
 	// 	log.Printf("error removing tmp directory: %v", err)
 	// }
@@ -253,10 +253,11 @@ func signingPass(passName string) error {
 	}
 	CERT_PASSWORD := os.Getenv("CERT_PASSWORD")
 
-	cmd := exec.Command("openssl", "smime", "-binary", "-sign", "-certfile", "./certificates/WWDR.pem", "-signer", "./certificates/passcertificate.pem", "-inkey", "./certificates/passkey.pem", "-in", "./tmp/"+passName+".pass/manifest.json", "-out", "./tmp/"+passName+".pass/signature", "-outform", "DER", "-passin", "pass:"+CERT_PASSWORD)
+	cmd := exec.Command("openssl", "smime", "-binary", "-sign", "-certfile", "./certificates/WWDR.pem", "-signer", "./certificates/passcertificate.pem", "-inkey", "./certificates/passkey.pem", "-in", "./b2wData/tmp/"+passName+".pass/manifest.json", "-out", "./b2wData/tmp/"+passName+".pass/signature", "-outform", "DER", "-passin", "pass:"+CERT_PASSWORD)
+	log.Println(cmd.Path)
 	err = cmd.Run()
 	if err != nil {
-		log.Println("Error executing command: ", err)
+		log.Println("Error executing OpenSSL command: ", err)
 		return err
 	}
 	log.Printf("Signing of the pass %s executed successfully\n", passName)
@@ -265,9 +266,8 @@ func signingPass(passName string) error {
 }
 
 func createPKPass(passName string) (string, error) {
-	// cmd := exec.Command("zip", "-r", "./passes/"+passName+".pkpass", "./tmp/"+passName+".pass")
 	// Change working directory
-	err := os.Chdir("./tmp/" + passName + ".pass")
+	err := os.Chdir("./b2wData/tmp/" + passName + ".pass")
 	if err != nil {
 		log.Fatalf("os.Chdir() failed with %s\n", err)
 		return "", err
@@ -276,9 +276,10 @@ func createPKPass(passName string) (string, error) {
 	cmd := exec.Command("zip", "-r", "../../passes/"+passName+".pkpass", ".")
 	err = cmd.Run()
 	if err != nil {
-		log.Println("Error executing command: ", err)
+		log.Println("Error executing ZIP command: ", err)
 		return "", err
 	}
+	os.Chdir("../../../")
 	log.Printf("Creation of the pkpass %s executed successfully\n", passName)
 	return passName + ".pkpass", nil
 }
