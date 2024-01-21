@@ -3,9 +3,19 @@ package main
 import (
 	"flag"
 	"log"
+	"net/http"
+	"os"
 
 	"github.com/gin-gonic/gin"
+	"github.com/joho/godotenv"
 )
+
+func init() {
+	err := godotenv.Load()
+	if err != nil {
+		log.Fatal("Error loading .env file")
+	}
+}
 
 func main() {
 	port := flag.String("port", "8080", "Port to run the server on")
@@ -38,7 +48,7 @@ func main() {
 		})
 	})
 
-	r.POST("/create", func(c *gin.Context) {
+	r.POST("/create", AuthRequired(), func(c *gin.Context) {
 		plan := c.PostForm("plan")
 		companyName := c.PostForm("companyName")
 		iban := c.PostForm("iban")
@@ -96,5 +106,23 @@ func main() {
 
 	if err := r.Run(serverURL); err != nil {
 		log.Fatal("Server run failed:", err)
+	}
+}
+
+func AuthRequired() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		token := c.GetHeader("Authorization")
+
+		// Here we are just checking if the token is what we expect. In a real-world application,
+		// you would probably use a more sophisticated way to validate the token, like JWT.
+		if token != os.Getenv("AUTH_TOKEN") {
+			c.JSON(http.StatusUnauthorized, gin.H{
+				"error": "Unauthorized",
+			})
+			c.Abort()
+			return
+		}
+
+		c.Next()
 	}
 }

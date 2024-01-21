@@ -12,8 +12,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
-
-	"github.com/joho/godotenv"
 )
 
 // PassData represents the data structure for pass.json
@@ -247,15 +245,11 @@ func copyImages(srcDir, dstDir string) (map[string]string, error) {
 }
 
 func signingPass(passName string) error {
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal("Error loading .env file")
-	}
 	CERT_PASSWORD := os.Getenv("CERT_PASSWORD")
 
 	cmd := exec.Command("openssl", "smime", "-binary", "-sign", "-certfile", "./certificates/WWDR.pem", "-signer", "./certificates/passcertificate.pem", "-inkey", "./certificates/passkey.pem", "-in", "./b2wData/tmp/"+passName+".pass/manifest.json", "-out", "./b2wData/tmp/"+passName+".pass/signature", "-outform", "DER", "-passin", "pass:"+CERT_PASSWORD)
 	log.Println(cmd.Path)
-	err = cmd.Run()
+	err := cmd.Run()
 	if err != nil {
 		log.Println("Error executing OpenSSL command: ", err)
 		return err
