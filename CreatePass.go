@@ -168,10 +168,10 @@ func CreatePass(plan, companyName, iban, bic, address string) (string, error) {
 		return "", fmt.Errorf("error creating pkpass: %v", err)
 	}
 
-	// err = os.RemoveAll("./b2wData/tmp/" + passName + ".pass")
-	// if err != nil {
-	// 	log.Printf("error removing tmp directory: %v", err)
-	// }
+	err = os.RemoveAll("./b2wData/tmp/" + passName + ".pass")
+	if err != nil {
+		log.Printf("error removing tmp directory: %v", err)
+	}
 
 	return pkpassName, nil
 }
