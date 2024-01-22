@@ -5,7 +5,9 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"time"
 
+	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 )
@@ -25,6 +27,20 @@ func main() {
 
 	r := gin.Default()
 	r.StaticFS("/passes", gin.Dir("./b2wData/passes", false))
+
+	// Configuring CORS
+	r.Use(cors.New(cors.Config{
+		AllowOrigins: []string{"*"}, // Be careful with this in production
+		// AllowMethods:     []string{"PUT", "PATCH", "GET", "POST", "DELETE", "OPTIONS"},
+		AllowMethods:     []string{"POST"},
+		AllowHeaders:     []string{"Origin", "Authorization", "Content-Type"},
+		ExposeHeaders:    []string{"Content-Length"},
+		AllowCredentials: true,
+		AllowOriginFunc: func(origin string) bool {
+			return true // allow any origin or you could put your specific one
+		},
+		MaxAge: 12 * time.Hour,
+	}))
 
 	r.GET("/test", func(c *gin.Context) {
 		pkpassName, err := CreatePass(
@@ -50,6 +66,7 @@ func main() {
 
 	r.POST("/create", AuthRequired(), func(c *gin.Context) {
 		plan := c.PostForm("plan")
+		log.Println(c.Request.MultipartForm)
 		companyName := c.PostForm("companyName")
 		iban := c.PostForm("iban")
 		bic := c.PostForm("bic")
