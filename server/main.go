@@ -104,6 +104,7 @@ func main() {
 		}
 
 		pkpassName, err := CreatePass(
+			companyID,
 			cashback,
 			companyName,
 			iban,

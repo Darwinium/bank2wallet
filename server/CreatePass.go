@@ -53,16 +53,25 @@ type PassData struct {
 }
 
 // CreatePass generates the necessary directories and files for a pass
-func CreatePass(cashback, companyName, iban, bic, address string) (string, error) {
+func CreatePass(companyID, cashback, companyName, iban, bic, address string) (string, error) {
+	db, err := getDBConnection()
+	if err != nil {
+		return "", err
+	}
+	newPass, err := AddNewPass(db, companyID, cashback, companyName, iban, bic, address)
+	if err != nil {
+		return "", fmt.Errorf("error adding new pass: %v", err)
+	}
+	serialNumber := newPass.ID.String()
 	pass := PassData{
 		FormatVersion:       1,
 		PassTypeIdentifier:  "pass.com.finom.bank2wallet",
-		SerialNumber:        "8j23fm3",
+		SerialNumber:        serialNumber,
 		WebServiceURL:       "https://finom.co/passes/",
 		AuthenticationToken: "vxwxd7J8AlNNFPS8k0a0FfUFtq0ewzFdc",
 		TeamIdentifier:      "35XPTK6L36",
 		OrganizationName:    "Finom",
-		Description:         "Your bank details in Finom",
+		Description:         "Your Finom Bank Details",
 		LogoText:            "Your Bank Details",
 		BackgroundColor:     "rgb(255, 76, 92)",
 		ForegroundColor:     "rgb(255, 255, 255)",
@@ -101,6 +110,16 @@ func CreatePass(cashback, companyName, iban, bic, address string) (string, error
 				},
 			},
 			BackFields: []Field{
+				{
+					Key:   "serialNumber",
+					Label: "Serial Number",
+					Value: serialNumber,
+				},
+				{
+					Key:   "companyID",
+					Label: "Company ID",
+					Value: companyID,
+				},
 				{
 					Key:   "info",
 					Label: "Additional Information",
