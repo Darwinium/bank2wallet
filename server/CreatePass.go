@@ -53,7 +53,7 @@ type PassData struct {
 }
 
 // CreatePass generates the necessary directories and files for a pass
-func CreatePass(plan, companyName, iban, bic, address string) (string, error) {
+func CreatePass(cashback, companyName, iban, bic, address string) (string, error) {
 	pass := PassData{
 		FormatVersion:       1,
 		PassTypeIdentifier:  "pass.com.finom.bank2wallet",
@@ -70,9 +70,9 @@ func CreatePass(plan, companyName, iban, bic, address string) (string, error) {
 		Generic: Generic{
 			HeaderFields: []Field{
 				{
-					Key:   "plan",
-					Label: "PLAN",
-					Value: plan,
+					Key:   "cashback",
+					Label: "CASHBACK",
+					Value: cashback,
 				},
 			},
 			PrimaryFields: []Field{

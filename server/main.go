@@ -44,7 +44,7 @@ func main() {
 
 	r.GET("/test", func(c *gin.Context) {
 		pkpassName, err := CreatePass(
-			"Premium",
+			"32.56",
 			"Ivo Dimitrov Super Puper&&& Company",
 			"NL24 FNOM 0698 9885 95",
 			"FNOMNL22",
@@ -65,7 +65,7 @@ func main() {
 	})
 
 	r.POST("/create", AuthRequired(), func(c *gin.Context) {
-		plan := c.PostForm("plan")
+		cashback := c.PostForm("cashback") + "€"
 		log.Println(c.Request.MultipartForm)
 		companyName := c.PostForm("companyName")
 		iban := c.PostForm("iban")
@@ -73,8 +73,8 @@ func main() {
 		address := c.PostForm("address")
 
 		missingFields := []string{}
-		if plan == "" {
-			missingFields = append(missingFields, "plan")
+		if cashback == "" {
+			cashback = "0" + "€"
 		}
 		if companyName == "" {
 			missingFields = append(missingFields, "companyName")
@@ -98,7 +98,7 @@ func main() {
 		}
 
 		pkpassName, err := CreatePass(
-			plan,
+			cashback,
 			companyName,
 			iban,
 			bic,
