@@ -23,11 +23,9 @@ func main() {
 	port := flag.String("port", "8080", "Port to run the server on")
 	flag.Parse()
 
-	serverURL := "0.0.0.0:" + *port
+	serverURL := "localhost:" + *port
 
 	r := gin.Default()
-	r.StaticFS("/passes", gin.Dir("./b2wData/passes", false))
-
 	// Configuring CORS
 	r.Use(cors.New(cors.Config{
 		AllowOrigins: []string{"*"}, // Be careful with this in production
@@ -42,29 +40,34 @@ func main() {
 		MaxAge: 12 * time.Hour,
 	}))
 
-	r.GET("/test", func(c *gin.Context) {
-		pkpassName, err := CreatePass(
-			"32.56",
-			"Ivo Dimitrov Super Puper&&& Company",
-			"NL24 FNOM 0698 9885 95",
-			"FNOMNL22",
-			"Kastanienallee 99, 10435, Berlin, Germany",
-		)
-		if err != nil {
-			c.JSON(500, gin.H{
-				"message": "Failed to create pass",
-				"error":   err.Error(),
-			})
-			return
-		}
+	r.StaticFS("/passes", gin.Dir("./b2wData/passes", false))
 
-		c.JSON(200, gin.H{
-			"message": "Pass was created successfully",
-			"link":    serverURL + "/passes/" + pkpassName,
-		})
-	})
+	// ---- DELETE AFTER DEBUGGING BEGIN ---- //
+	// r.GET("/test", func(c *gin.Context) {
+	// 	pkpassName, err := CreatePass(
+	// 		"32.56",
+	// 		"Ivo Dimitrov Super Puper&&& Company",
+	// 		"NL24 FNOM 0698 9885 95",
+	// 		"FNOMNL22",
+	// 		"Kastanienallee 99, 10435, Berlin, Germany",
+	// 	)
+	// 	if err != nil {
+	// 		c.JSON(500, gin.H{
+	// 			"message": "Failed to create pass",
+	// 			"error":   err.Error(),
+	// 		})
+	// 		return
+	// 	}
+
+	// 	c.JSON(200, gin.H{
+	// 		"message": "Pass was created successfully",
+	// 		"link":    serverURL + "/passes/" + pkpassName,
+	// 	})
+	// })
+	// ---- DELETE AFTER DEBUGGING END ---- //
 
 	r.POST("/create", AuthRequired(), func(c *gin.Context) {
+		companyID := c.PostForm("companyID")
 		cashback := c.PostForm("cashback") + "€"
 		log.Println(c.Request.MultipartForm)
 		companyName := c.PostForm("companyName")
@@ -73,6 +76,9 @@ func main() {
 		address := c.PostForm("address")
 
 		missingFields := []string{}
+		if companyID == "" {
+			missingFields = append(missingFields, "companyID")
+		}
 		if cashback == "" {
 			cashback = "0" + "€"
 		}
@@ -107,8 +113,9 @@ func main() {
 		if err != nil {
 			log.Println("Failed to create pass:", err)
 			c.JSON(500, gin.H{
-				"message": "Failed to create pass",
-				"error":   err.Error(),
+				"message":   "Failed to create pass",
+				"error":     err.Error(),
+				"companyID": companyID,
 			})
 			return
 		}
@@ -116,8 +123,36 @@ func main() {
 		log.Println("Pass was created successfully", "link", serverURL+"/passes/"+pkpassName)
 
 		c.JSON(200, gin.H{
-			"message": "Pass was created successfully",
-			"link":    serverURL + "/passes/" + pkpassName,
+			"message":   "Pass was created successfully",
+			"link":      serverURL + "/passes/" + pkpassName,
+			"companyID": companyID,
+		})
+	})
+
+	r.POST("/updateCashback", AuthRequired(), func(c *gin.Context) {
+		companyID := c.PostForm("companyID")
+		cashback := c.PostForm("cashback") + "€"
+
+		missingFields := []string{}
+		if companyID == "" {
+			missingFields = append(missingFields, "companyID")
+		}
+		if cashback == "" {
+			missingFields = append(missingFields, "cashback")
+		}
+
+		if len(missingFields) > 0 {
+			c.JSON(400, gin.H{
+				"message": "Missing required fields during the update of cashback",
+				"fields":  missingFields,
+			})
+			return
+		}
+
+		c.JSON(200, gin.H{
+			"message": "Cashback was updated successfully",
+			// "link":    serverURL + "/passes/" + pkpassName,
+			"companyID": companyID,
 		})
 	})
 
