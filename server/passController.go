@@ -1,20 +1,15 @@
 package main
 
 import (
-	"crypto/sha1"
-	"encoding/hex"
 	"encoding/json"
 	"fmt"
-	"io"
 	"log"
 	"os"
 	"os/exec"
-	"path/filepath"
-	"regexp"
-	"strings"
 )
 
 const (
+	TemplateDir     = "./template"
 	TempDir         = "./b2wData/tmp/"
 	PassesDir       = "./passes/"
 	CertificatesDir = "./certificates/"
@@ -58,18 +53,18 @@ type PassData struct {
 	Barcode             Barcode `json:"barcode"`
 }
 
-// CreatePass generates the necessary directories and files for a pass
-func CreatePass(companyID, cashback, companyName, iban, bic, address string) (string, error) {
+func NewPassData(companyID, cashback, companyName, iban, bic, address string) (PassData, error) {
 	db, err := getDBConnection()
 	if err != nil {
-		return "", err
+		return PassData{}, err
 	}
 	newPass, err := AddNewPass(db, companyID, cashback, companyName, iban, bic, address)
 	if err != nil {
-		return "", fmt.Errorf("error adding new pass: %v", err)
+		return PassData{}, fmt.Errorf("error adding new pass: %v", err)
 	}
 	serialNumber := newPass.ID.String()
-	pass := PassData{
+
+	return PassData{
 		FormatVersion:       1,
 		PassTypeIdentifier:  "pass.com.finom.bank2wallet",
 		SerialNumber:        serialNumber,
@@ -138,14 +133,20 @@ func CreatePass(companyID, cashback, companyName, iban, bic, address string) (st
 			Message:         "BCD\n001\n1\nSCT\n" + bic + "\n" + companyName + "\n" + iban,
 			MessageEncoding: "iso-8859-1",
 		},
+	}, nil
+}
+
+// CreatePass generates the necessary directories and files for a pass
+func CreatePass(companyID, cashback, companyName, iban, bic, address string) (string, error) {
+	pass, err := NewPassData(companyID, cashback, companyName, iban, bic, address)
+	if err != nil {
+		return "", err
 	}
 
-	passName := sanitizeCompanyName(companyName)
-	// Init Manifest
-	manifest := make(map[string]string)
+	passName := SanitizeText(companyName)
 
 	// Directories and files to create
-	if err := createDir(TempDir + passName + ".pass"); err != nil {
+	if err := CreateDir(TempDir + passName + ".pass"); err != nil {
 		return "", err
 	}
 
@@ -154,25 +155,26 @@ func CreatePass(companyID, cashback, companyName, iban, bic, address string) (st
 	if err != nil {
 		return "", fmt.Errorf("error marshalling pass.json: %v", err)
 	}
-	passFilePath := "./b2wData/tmp/" + passName + ".pass" + "/pass.json"
+	passFilePath := TempDir + passName + ".pass" + "/pass.json"
 	if err := os.WriteFile(passFilePath, passJSON, 0644); err != nil {
 		return "", fmt.Errorf("error writing pass.json: %v", err)
 	}
-	manifest["pass.json"] = sha1Hash(passJSON)
+	manifest := make(map[string]string)
+	manifest["pass.json"] = Sha1Hash(passJSON)
 
 	// Move images from template directory to pass directory
-	imageManifest, err := copyImages("./template", "./b2wData/tmp/"+passName+".pass")
+	imageManifest, err := CopyImages(TemplateDir, TempDir+passName+".pass")
 	if err != nil {
 		return "", fmt.Errorf("error copying images: %v", err)
 	}
 
 	// Create manifest.json
-	manifest = mergeMaps(manifest, imageManifest)
+	manifest = MergeMaps(manifest, imageManifest)
 	manifestJSON, err := json.MarshalIndent(manifest, "", " ")
 	if err != nil {
 		return "", fmt.Errorf("error marshalling manifest.json: %v", err)
 	}
-	if err := os.WriteFile("./b2wData/tmp/"+passName+".pass/manifest.json", manifestJSON, 0644); err != nil {
+	if err := os.WriteFile(TempDir+passName+".pass/manifest.json", manifestJSON, 0644); err != nil {
 		return "", fmt.Errorf("error writing manifest.json: %v", err)
 	}
 
@@ -189,84 +191,12 @@ func CreatePass(companyID, cashback, companyName, iban, bic, address string) (st
 	}
 
 	// Remove tmp directory
-	err = os.RemoveAll("./b2wData/tmp/" + passName + ".pass")
+	err = os.RemoveAll(TempDir + passName + ".pass")
 	if err != nil {
 		log.Printf("error removing tmp directory: %v", err)
 	}
 
 	return pkpassName, nil
-}
-
-// sanitizeCompanyName sanitizes the company name to be used as the pass name
-func sanitizeCompanyName(companyName string) string {
-	// Remove all non-alphanumeric characters.
-	reg, _ := regexp.Compile("[^a-zA-Z0-9]+")
-	sanitized := reg.ReplaceAllString(companyName, "")
-
-	// Remove spaces.
-	sanitized = strings.ReplaceAll(sanitized, " ", "_")
-
-	// Truncate to 15 characters.
-	if len(sanitized) > 15 {
-		sanitized = sanitized[:15]
-	}
-
-	return sanitized
-}
-
-// copyImages copies all images from the source directory to the destination directory.
-func copyImages(srcDir, dstDir string) (map[string]string, error) {
-	// Ensure destination directory exists.
-	if err := createDir(dstDir); err != nil {
-		return nil, err
-	}
-
-	// Get list of files in source directory.
-	files, err := os.ReadDir(srcDir)
-	if err != nil {
-		return nil, err
-	}
-
-	// Manifest for images
-	manifest := make(map[string]string)
-
-	// Iterate over each file.
-	for _, file := range files {
-		// Skip directories.
-		if file.IsDir() {
-			continue
-		}
-
-		// Open source file.
-		srcFile, err := os.Open(filepath.Join(srcDir, file.Name()))
-		if err != nil {
-			return nil, err
-		}
-		defer srcFile.Close()
-
-		// Create destination file.
-		newFilePath := filepath.Join(dstDir, file.Name())
-		dstFile, err := os.Create(newFilePath)
-		if err != nil {
-			return nil, err
-		}
-		defer dstFile.Close()
-
-		// Copy content from source file to destination file.
-		if _, err := io.Copy(dstFile, srcFile); err != nil {
-			return nil, err
-		}
-
-		// Read the content of the destination file.
-		dstContent, err := os.ReadFile(newFilePath)
-		if err != nil {
-			return nil, err
-		}
-
-		manifest[file.Name()] = sha1Hash(dstContent)
-	}
-
-	return manifest, nil
 }
 
 // signingPass signs the pass with the certificates
@@ -282,14 +212,6 @@ func signingPass(passName string) error {
 	log.Printf("Signing of the pass %s executed successfully\n", passName)
 	return nil
 
-}
-
-// createDir creates a directory if it doesn't exist
-func createDir(dir string) error {
-	if err := os.MkdirAll(dir, 0755); err != nil {
-		return err
-	}
-	return nil
 }
 
 // createPKPass creates the pkpass file
@@ -310,23 +232,4 @@ func createPKPass(passName string) (string, error) {
 	os.Chdir("../../../")
 	log.Printf("Creation of the pkpass %s executed successfully\n", passName)
 	return passName + ".pkpass", nil
-}
-
-// sha1Hash returns the SHA1 hash of the given data as a hex string
-func sha1Hash(data []byte) string {
-	hash := sha1.New()
-	hash.Write(data)
-	return hex.EncodeToString(hash.Sum(nil))
-}
-
-// mergeMaps merges two maps
-func mergeMaps(m1 map[string]string, m2 map[string]string) map[string]string {
-	merged := make(map[string]string)
-	for k, v := range m1 {
-		merged[k] = v
-	}
-	for key, value := range m2 {
-		merged[key] = value
-	}
-	return merged
 }
