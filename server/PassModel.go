@@ -58,11 +58,12 @@ func AddNewPass(db *gorm.DB, companyID, cashback, companyName, iban, bic, addres
 		Cashback:    cashback,
 	}
 
-	if err := db.Create(&pass).Error; err != nil {
+	// Check if a pass with the given companyID already exists, if not create a new one
+	if err := db.Where(Pass{CompanyID: companyID}).Assign(pass).FirstOrCreate(&pass).Error; err != nil {
 		return Pass{}, err
 	}
 
-	log.Printf("New pass added: %v\n", pass)
+	log.Printf("Pass updated or created: %v\n", pass)
 
 	return pass, nil
 }
