@@ -14,6 +14,12 @@ import (
 	"strings"
 )
 
+const (
+	TempDir         = "./b2wData/tmp/"
+	PassesDir       = "./passes/"
+	CertificatesDir = "./certificates/"
+)
+
 // PassData represents the data structure for pass.json
 type Field struct {
 	Key   string `json:"key"`
@@ -135,16 +141,12 @@ func CreatePass(companyID, cashback, companyName, iban, bic, address string) (st
 	}
 
 	passName := sanitizeCompanyName(companyName)
-
-	// Directories and files to create
-	dirs := []string{passName + ".pass"}
+	// Init Manifest
 	manifest := make(map[string]string)
 
-	// Create directories
-	for _, dir := range dirs {
-		if err := os.MkdirAll("./b2wData/tmp/"+dir, 0755); err != nil {
-			return "", fmt.Errorf("error creating directory %s: %v", dir, err)
-		}
+	// Directories and files to create
+	if err := createDir(TempDir + passName + ".pass"); err != nil {
+		return "", err
 	}
 
 	// Create pass.json
@@ -164,8 +166,8 @@ func CreatePass(companyID, cashback, companyName, iban, bic, address string) (st
 		return "", fmt.Errorf("error copying images: %v", err)
 	}
 
-	manifest = mergeMaps(manifest, imageManifest)
 	// Create manifest.json
+	manifest = mergeMaps(manifest, imageManifest)
 	manifestJSON, err := json.MarshalIndent(manifest, "", " ")
 	if err != nil {
 		return "", fmt.Errorf("error marshalling manifest.json: %v", err)
@@ -180,11 +182,13 @@ func CreatePass(companyID, cashback, companyName, iban, bic, address string) (st
 		return "", fmt.Errorf("error signing pass: %v", err)
 	}
 
+	// Create pkpass
 	pkpassName, err := createPKPass(passName)
 	if err != nil {
 		return "", fmt.Errorf("error creating pkpass: %v", err)
 	}
 
+	// Remove tmp directory
 	err = os.RemoveAll("./b2wData/tmp/" + passName + ".pass")
 	if err != nil {
 		log.Printf("error removing tmp directory: %v", err)
@@ -193,6 +197,7 @@ func CreatePass(companyID, cashback, companyName, iban, bic, address string) (st
 	return pkpassName, nil
 }
 
+// sanitizeCompanyName sanitizes the company name to be used as the pass name
 func sanitizeCompanyName(companyName string) string {
 	// Remove all non-alphanumeric characters.
 	reg, _ := regexp.Compile("[^a-zA-Z0-9]+")
@@ -209,9 +214,10 @@ func sanitizeCompanyName(companyName string) string {
 	return sanitized
 }
 
+// copyImages copies all images from the source directory to the destination directory.
 func copyImages(srcDir, dstDir string) (map[string]string, error) {
 	// Ensure destination directory exists.
-	if err := os.MkdirAll(dstDir, 0755); err != nil {
+	if err := createDir(dstDir); err != nil {
 		return nil, err
 	}
 
@@ -263,10 +269,10 @@ func copyImages(srcDir, dstDir string) (map[string]string, error) {
 	return manifest, nil
 }
 
+// signingPass signs the pass with the certificates
 func signingPass(passName string) error {
 	CERT_PASSWORD := os.Getenv("CERT_PASSWORD")
-
-	cmd := exec.Command("openssl", "smime", "-binary", "-sign", "-certfile", "./certificates/WWDR.pem", "-signer", "./certificates/passcertificate.pem", "-inkey", "./certificates/passkey.pem", "-in", "./b2wData/tmp/"+passName+".pass/manifest.json", "-out", "./b2wData/tmp/"+passName+".pass/signature", "-outform", "DER", "-passin", "pass:"+CERT_PASSWORD)
+	cmd := exec.Command("openssl", "smime", "-binary", "-sign", "-certfile", CertificatesDir+"WWDR.pem", "-signer", CertificatesDir+"passcertificate.pem", "-inkey", CertificatesDir+"passkey.pem", "-in", TempDir+passName+".pass/manifest.json", "-out", TempDir+passName+".pass/signature", "-outform", "DER", "-passin", "pass:"+CERT_PASSWORD)
 	log.Println(cmd.Path)
 	err := cmd.Run()
 	if err != nil {
@@ -278,6 +284,15 @@ func signingPass(passName string) error {
 
 }
 
+// createDir creates a directory if it doesn't exist
+func createDir(dir string) error {
+	if err := os.MkdirAll(dir, 0755); err != nil {
+		return err
+	}
+	return nil
+}
+
+// createPKPass creates the pkpass file
 func createPKPass(passName string) (string, error) {
 	// Change working directory
 	err := os.Chdir("./b2wData/tmp/" + passName + ".pass")
@@ -304,6 +319,7 @@ func sha1Hash(data []byte) string {
 	return hex.EncodeToString(hash.Sum(nil))
 }
 
+// mergeMaps merges two maps
 func mergeMaps(m1 map[string]string, m2 map[string]string) map[string]string {
 	merged := make(map[string]string)
 	for k, v := range m1 {
