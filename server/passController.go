@@ -9,19 +9,20 @@ import (
 )
 
 const (
-	TemplateDir     = "./template"
-	TempDir         = "./b2wData/tmp/"
-	PassesDir       = "./passes/"
-	CertificatesDir = "./certificates/"
+	TemplateDir     = "./template"      // Directory with the template images
+	TempDir         = "./b2wData/tmp/"  // Directory to store the temporary pass files
+	PassesDir       = "./passes/"       // Directory to store the generated pkpass files
+	CertificatesDir = "./certificates/" // Directory with the certificates
 )
 
-// PassData represents the data structure for pass.json
+// Field represents a field in the pass
 type Field struct {
 	Key   string `json:"key"`
 	Label string `json:"label"`
 	Value string `json:"value"`
 }
 
+// Generic represents the generic type of pass
 type Generic struct {
 	HeaderFields    []Field `json:"headerFields"`
 	PrimaryFields   []Field `json:"primaryFields"`
@@ -30,12 +31,14 @@ type Generic struct {
 	AuxiliaryFields []Field `json:"auxiliaryFields"`
 }
 
+// Barcode represents the barcode of the pass
 type Barcode struct {
 	Format          string `json:"format"`
 	Message         string `json:"message"`
 	MessageEncoding string `json:"messageEncoding"`
 }
 
+// PassData represents the data itself in the pass
 type PassData struct {
 	FormatVersion       int     `json:"formatVersion"`
 	PassTypeIdentifier  string  `json:"passTypeIdentifier"`
@@ -53,6 +56,7 @@ type PassData struct {
 	Barcode             Barcode `json:"barcode"`
 }
 
+// NewPassData creates a new pass with the given data and saves it in the database. It returns the pass data
 func NewPassData(companyID, cashback, companyName, iban, bic, address string) (PassData, error) {
 	db, err := getDBConnection()
 	if err != nil {
@@ -136,7 +140,7 @@ func NewPassData(companyID, cashback, companyName, iban, bic, address string) (P
 	}, nil
 }
 
-// CreatePass generates the necessary directories and files for a pass
+// CreatePass generates the necessary directories and files for a pass. It returns the name of the pass file in the pkpass format
 func CreatePass(companyID, cashback, companyName, iban, bic, address string) (string, error) {
 	pass, err := NewPassData(companyID, cashback, companyName, iban, bic, address)
 	if err != nil {
@@ -214,7 +218,7 @@ func signingPass(passName string) error {
 
 }
 
-// createPKPass creates the pkpass file
+// createPKPass creates the pkpass file. It returns the name of the pkpass file
 func createPKPass(passName string) (string, error) {
 	// Change working directory
 	err := os.Chdir("./b2wData/tmp/" + passName + ".pass")

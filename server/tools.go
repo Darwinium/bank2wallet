@@ -10,7 +10,8 @@ import (
 	"strings"
 )
 
-// SanitizeText sanitizes the text to be used as a filename
+// SanitizeText sanitizes the text to be used as a filename.
+// It removes all non-alphanumeric characters, replaces spaces with underscores, and truncates to 15 characters.
 func SanitizeText(text string) string {
 	// Remove all non-alphanumeric characters.
 	reg, _ := regexp.Compile("[^a-zA-Z0-9]+")

@@ -42,30 +42,6 @@ func main() {
 
 	r.StaticFS("/passes", gin.Dir("./b2wData/passes", false))
 
-	// ---- DELETE AFTER DEBUGGING BEGIN ---- //
-	// r.GET("/test", func(c *gin.Context) {
-	// 	pkpassName, err := CreatePass(
-	// 		"32.56",
-	// 		"Ivo Dimitrov Super Puper&&& Company",
-	// 		"NL24 FNOM 0698 9885 95",
-	// 		"FNOMNL22",
-	// 		"Kastanienallee 99, 10435, Berlin, Germany",
-	// 	)
-	// 	if err != nil {
-	// 		c.JSON(500, gin.H{
-	// 			"message": "Failed to create pass",
-	// 			"error":   err.Error(),
-	// 		})
-	// 		return
-	// 	}
-
-	// 	c.JSON(200, gin.H{
-	// 		"message": "Pass was created successfully",
-	// 		"link":    serverURL + "/passes/" + pkpassName,
-	// 	})
-	// })
-	// ---- DELETE AFTER DEBUGGING END ---- //
-
 	r.POST("/create", AuthRequired(), func(c *gin.Context) {
 		companyID := c.PostForm("companyID")
 		cashback := c.PostForm("cashback") + "€"
