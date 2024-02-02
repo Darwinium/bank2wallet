@@ -1,0 +1,2 @@
+CREATE TABLE passes();
+CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
