@@ -172,9 +172,19 @@ func main() {
 			return
 		}
 
+		pass, err := UpdatePassByCompanyID(db, companyID, cashback)
+		if err != nil {
+			c.JSON(500, gin.H{
+				"message":   "Failed to get pass",
+				"error":     err.Error(),
+				"companyID": companyID,
+			})
+			return
+		}
+
 		c.JSON(200, gin.H{
-			"message": "Cashback was updated successfully",
-			// "link":    serverURL + "/passes/" + pkpassName,
+			"message":   "Cashback was updated successfully",
+			"link":      serverURL + "/passes/" + pass.ID.String() + ".pkpass",
 			"companyID": companyID,
 		})
 	})
