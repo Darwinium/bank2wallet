@@ -91,7 +91,7 @@ func main() {
 			return
 		}
 
-		pkpass, err := GeneratePass(
+		pass, err := GeneratePass(
 			db,
 			companyID,
 			cashback,
@@ -110,15 +110,15 @@ func main() {
 			return
 		}
 
-		pkpassFilePath := serverURL + "/passes/" + pkpass.FileName + ".pkpass"
+		pkpassFilePath := serverURL + "/passes/" + pass.ID.String() + ".pkpass"
 
 		log.Printf("Pass was created successfully!\nLink: %s\n", pkpassFilePath)
 
 		c.JSON(200, gin.H{
 			"message":   "Pass was created successfully",
 			"link":      pkpassFilePath,
-			"companyID": pkpass.CompanyID,
-			"passID":    pkpass.ID,
+			"companyID": pass.CompanyID,
+			"passID":    pass.ID,
 		})
 	})
 
@@ -145,7 +145,7 @@ func main() {
 
 		c.JSON(200, gin.H{
 			"message":   "Pass was retrieved successfully",
-			"link":      serverURL + "/passes/" + SanitizeText(pass.CompanyName) + ".pkpass",
+			"link":      serverURL + "/passes/" + pass.ID.String() + ".pkpass",
 			"companyID": companyID,
 			"passID":    pass.ID,
 		})

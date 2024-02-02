@@ -20,7 +20,6 @@ type Pass struct {
 	BIC         string    // BIC is the Bank Identifier Code
 	Address     string    // Address is the address of the company
 	Cashback    string    // Cashback is the cashback balance in euros
-	FileName    string    // FileName is the name of the pass file
 	CreatedAt   time.Time // Automatically managed by GORM for creation time
 	UpdatedAt   time.Time // Automatically managed by GORM for update time
 }
@@ -61,7 +60,6 @@ func AddNewPass(db *gorm.DB, companyID, cashback, companyName, iban, bic, addres
 		BIC:         bic,
 		Address:     address,
 		Cashback:    cashback,
-		FileName:    SanitizeText(companyName),
 	}
 
 	// Check if a pass with the given companyID already exists, if not create a new one

@@ -143,10 +143,10 @@ func GeneratePass(db *gorm.DB, companyID, cashback, companyName, iban, bic, addr
 	}
 
 	passCard := CreatePassStructure(passDB)
-	// passName := SanitizeText(companyName)
+	passName := passDB.ID.String()
 
 	// Directories and files to create
-	if err := CreateDir(TempDir + passDB.FileName + ".pass"); err != nil {
+	if err := CreateDir(TempDir + passName + ".pass"); err != nil {
 		return Pass{}, err
 	}
 
@@ -155,7 +155,7 @@ func GeneratePass(db *gorm.DB, companyID, cashback, companyName, iban, bic, addr
 	if err != nil {
 		return Pass{}, fmt.Errorf("error marshalling pass.json: %v", err)
 	}
-	passFilePath := TempDir + passDB.FileName + ".pass" + "/pass.json"
+	passFilePath := TempDir + passName + ".pass" + "/pass.json"
 	if err := os.WriteFile(passFilePath, passJSON, 0644); err != nil {
 		return Pass{}, fmt.Errorf("error writing pass.json: %v", err)
 	}
@@ -163,7 +163,7 @@ func GeneratePass(db *gorm.DB, companyID, cashback, companyName, iban, bic, addr
 	manifest["pass.json"] = Sha1Hash(passJSON)
 
 	// Move images from template directory to pass directory
-	imageManifest, err := CopyImages(TemplateDir, TempDir+passDB.FileName+".pass")
+	imageManifest, err := CopyImages(TemplateDir, TempDir+passName+".pass")
 	if err != nil {
 		return Pass{}, fmt.Errorf("error copying images: %v", err)
 	}
@@ -174,24 +174,24 @@ func GeneratePass(db *gorm.DB, companyID, cashback, companyName, iban, bic, addr
 	if err != nil {
 		return Pass{}, fmt.Errorf("error marshalling manifest.json: %v", err)
 	}
-	if err := os.WriteFile(TempDir+passDB.FileName+".pass/manifest.json", manifestJSON, 0644); err != nil {
+	if err := os.WriteFile(TempDir+passName+".pass/manifest.json", manifestJSON, 0644); err != nil {
 		return Pass{}, fmt.Errorf("error writing manifest.json: %v", err)
 	}
 
 	//Sign the pass
-	err = signingPassFile(passDB.FileName)
+	err = signingPassFile(passName)
 	if err != nil {
 		return Pass{}, fmt.Errorf("error signing pass: %v", err)
 	}
 
 	// Create pkpass
-	err = createPKPassFile(passDB.FileName)
+	err = createPKPassFile(passName)
 	if err != nil {
 		return Pass{}, fmt.Errorf("error creating pkpass: %v", err)
 	}
 
 	// Remove tmp directory of the pass
-	err = os.RemoveAll(TempDir + passDB.FileName + ".pass")
+	err = os.RemoveAll(TempDir + passName + ".pass")
 	if err != nil {
 		log.Printf("error removing tmp directory: %v", err)
 	}
