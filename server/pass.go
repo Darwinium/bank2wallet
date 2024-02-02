@@ -20,6 +20,7 @@ type Pass struct {
 	BIC         string    // BIC is the Bank Identifier Code
 	Address     string    // Address is the address of the company
 	Cashback    string    // Cashback is the cashback balance in euros
+	FileName    string    // FileName is the name of the pass file
 	CreatedAt   time.Time // Automatically managed by GORM for creation time
 	UpdatedAt   time.Time // Automatically managed by GORM for update time
 }
@@ -60,6 +61,7 @@ func AddNewPass(db *gorm.DB, companyID, cashback, companyName, iban, bic, addres
 		BIC:         bic,
 		Address:     address,
 		Cashback:    cashback,
+		FileName:    SanitizeText(companyName),
 	}
 
 	// Check if a pass with the given companyID already exists, if not create a new one
@@ -73,18 +75,28 @@ func AddNewPass(db *gorm.DB, companyID, cashback, companyName, iban, bic, addres
 }
 
 // UpdatePassByCompanyID updates the cashback of the pass with the given companyID
-func UpdatePassByCompanyID(db *gorm.DB, companyID, cashback string) error {
+func UpdatePassByCompanyID(db *gorm.DB, companyID, cashback string) (Pass, error) {
 	// Update cashback
 	var pass Pass
 	if err := db.Where("company_id = ?", companyID).First(&pass).Error; err != nil {
-		return err
+		return Pass{}, err
 	}
 
 	if err := db.Model(&pass).Update("cashback", cashback).Error; err != nil {
-		return err
+		return Pass{}, err
 	}
 
 	log.Printf("Cashback updated: %v\n", pass)
 
-	return nil
+	return pass, nil
+}
+
+// GetPassByCompanyID returns the pass with the given companyID
+func GetPassByCompanyID(db *gorm.DB, companyID string) (Pass, error) {
+	var pass Pass
+	if err := db.Where("company_id = ?", companyID).First(&pass).Error; err != nil {
+		return Pass{}, err
+	}
+
+	return pass, nil
 }

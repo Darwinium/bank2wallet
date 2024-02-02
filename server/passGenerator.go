@@ -6,6 +6,8 @@ import (
 	"log"
 	"os"
 	"os/exec"
+
+	"gorm.io/gorm"
 )
 
 const (
@@ -56,17 +58,10 @@ type PassData struct {
 	Barcode             Barcode `json:"barcode"`
 }
 
-// NewPassData creates a new pass with the given data and saves it in the database. It returns the pass data
-func NewPassData(companyID, cashback, companyName, iban, bic, address string) (PassData, error) {
-	db, err := getDBConnection()
-	if err != nil {
-		return PassData{}, err
-	}
-	newPass, err := AddNewPass(db, companyID, cashback, companyName, iban, bic, address)
-	if err != nil {
-		return PassData{}, fmt.Errorf("error adding new pass: %v", err)
-	}
-	serialNumber := newPass.ID.String()
+// CreatePassStructure creates the structure of the pass card with the given data
+func CreatePassStructure(pass Pass) PassData {
+
+	serialNumber := pass.ID.String()
 
 	return PassData{
 		FormatVersion:       1,
@@ -86,32 +81,32 @@ func NewPassData(companyID, cashback, companyName, iban, bic, address string) (P
 				{
 					Key:   "cashback",
 					Label: "CASHBACK",
-					Value: cashback,
+					Value: pass.Cashback,
 				},
 			},
 			PrimaryFields: []Field{
 				{
 					Key:   "company-name",
-					Value: companyName,
+					Value: pass.CompanyName,
 				},
 			},
 			SecondaryFields: []Field{
 				{
 					Key:   "iban",
 					Label: "IBAN",
-					Value: iban,
+					Value: pass.IBAN,
 				},
 				{
 					Key:   "bic",
 					Label: "BIC",
-					Value: bic,
+					Value: pass.BIC,
 				},
 			},
 			AuxiliaryFields: []Field{
 				{
 					Key:   "address",
 					Label: "ADDRESS",
-					Value: address,
+					Value: pass.Address,
 				},
 			},
 			BackFields: []Field{
@@ -123,7 +118,7 @@ func NewPassData(companyID, cashback, companyName, iban, bic, address string) (P
 				{
 					Key:   "companyID",
 					Label: "Company ID",
-					Value: companyID,
+					Value: pass.CompanyID,
 				},
 				{
 					Key:   "info",
@@ -134,77 +129,78 @@ func NewPassData(companyID, cashback, companyName, iban, bic, address string) (P
 		},
 		Barcode: Barcode{
 			Format:          "PKBarcodeFormatQR",
-			Message:         "BCD\n001\n1\nSCT\n" + bic + "\n" + companyName + "\n" + iban,
+			Message:         "BCD\n001\n1\nSCT\n" + pass.BIC + "\n" + pass.CompanyName + "\n" + pass.IBAN,
 			MessageEncoding: "iso-8859-1",
 		},
-	}, nil
+	}
 }
 
 // CreatePass generates the necessary directories and files for a pass. It returns the name of the pass file in the pkpass format
-func CreatePass(companyID, cashback, companyName, iban, bic, address string) (string, error) {
-	pass, err := NewPassData(companyID, cashback, companyName, iban, bic, address)
+func GeneratePass(db *gorm.DB, companyID, cashback, companyName, iban, bic, address string) (Pass, error) {
+	passDB, err := AddNewPass(db, companyID, cashback, companyName, iban, bic, address)
 	if err != nil {
-		return "", err
+		return Pass{}, fmt.Errorf("error adding new pass: %v", err)
 	}
 
-	passName := SanitizeText(companyName)
+	passCard := CreatePassStructure(passDB)
+	// passName := SanitizeText(companyName)
 
 	// Directories and files to create
-	if err := CreateDir(TempDir + passName + ".pass"); err != nil {
-		return "", err
+	if err := CreateDir(TempDir + passDB.FileName + ".pass"); err != nil {
+		return Pass{}, err
 	}
 
 	// Create pass.json
-	passJSON, err := json.MarshalIndent(pass, "", " ")
+	passJSON, err := json.MarshalIndent(passCard, "", " ")
 	if err != nil {
-		return "", fmt.Errorf("error marshalling pass.json: %v", err)
+		return Pass{}, fmt.Errorf("error marshalling pass.json: %v", err)
 	}
-	passFilePath := TempDir + passName + ".pass" + "/pass.json"
+	passFilePath := TempDir + passDB.FileName + ".pass" + "/pass.json"
 	if err := os.WriteFile(passFilePath, passJSON, 0644); err != nil {
-		return "", fmt.Errorf("error writing pass.json: %v", err)
+		return Pass{}, fmt.Errorf("error writing pass.json: %v", err)
 	}
 	manifest := make(map[string]string)
 	manifest["pass.json"] = Sha1Hash(passJSON)
 
 	// Move images from template directory to pass directory
-	imageManifest, err := CopyImages(TemplateDir, TempDir+passName+".pass")
+	imageManifest, err := CopyImages(TemplateDir, TempDir+passDB.FileName+".pass")
 	if err != nil {
-		return "", fmt.Errorf("error copying images: %v", err)
+		return Pass{}, fmt.Errorf("error copying images: %v", err)
 	}
 
 	// Create manifest.json
 	manifest = MergeMaps(manifest, imageManifest)
 	manifestJSON, err := json.MarshalIndent(manifest, "", " ")
 	if err != nil {
-		return "", fmt.Errorf("error marshalling manifest.json: %v", err)
+		return Pass{}, fmt.Errorf("error marshalling manifest.json: %v", err)
 	}
-	if err := os.WriteFile(TempDir+passName+".pass/manifest.json", manifestJSON, 0644); err != nil {
-		return "", fmt.Errorf("error writing manifest.json: %v", err)
+	if err := os.WriteFile(TempDir+passDB.FileName+".pass/manifest.json", manifestJSON, 0644); err != nil {
+		return Pass{}, fmt.Errorf("error writing manifest.json: %v", err)
 	}
 
 	//Sign the pass
-	err = signingPass(passName)
+	err = signingPassFile(passDB.FileName)
 	if err != nil {
-		return "", fmt.Errorf("error signing pass: %v", err)
+		return Pass{}, fmt.Errorf("error signing pass: %v", err)
 	}
 
 	// Create pkpass
-	pkpassName, err := createPKPass(passName)
+	err = createPKPassFile(passDB.FileName)
 	if err != nil {
-		return "", fmt.Errorf("error creating pkpass: %v", err)
+		return Pass{}, fmt.Errorf("error creating pkpass: %v", err)
 	}
 
-	// Remove tmp directory
-	err = os.RemoveAll(TempDir + passName + ".pass")
+	// Remove tmp directory of the pass
+	err = os.RemoveAll(TempDir + passDB.FileName + ".pass")
 	if err != nil {
 		log.Printf("error removing tmp directory: %v", err)
 	}
 
-	return pkpassName, nil
+	return passDB, nil
 }
 
-// signingPass signs the pass with the certificates
-func signingPass(passName string) error {
+// signingPassFile signs the pass with the certificates
+func signingPassFile(passName string) error {
 	CERT_PASSWORD := os.Getenv("CERT_PASSWORD")
 	cmd := exec.Command("openssl", "smime", "-binary", "-sign", "-certfile", CertificatesDir+"WWDR.pem", "-signer", CertificatesDir+"passcertificate.pem", "-inkey", CertificatesDir+"passkey.pem", "-in", TempDir+passName+".pass/manifest.json", "-out", TempDir+passName+".pass/signature", "-outform", "DER", "-passin", "pass:"+CERT_PASSWORD)
 	log.Println(cmd.Path)
@@ -218,22 +214,22 @@ func signingPass(passName string) error {
 
 }
 
-// createPKPass creates the pkpass file. It returns the name of the pkpass file
-func createPKPass(passName string) (string, error) {
+// createPKPassFile creates the pkpass file. It returns the name of the pkpass file
+func createPKPassFile(passName string) error {
 	// Change working directory
 	err := os.Chdir("./b2wData/tmp/" + passName + ".pass")
 	if err != nil {
 		log.Fatalf("os.Chdir() failed with %s\n", err)
-		return "", err
+		return err
 	}
 
 	cmd := exec.Command("zip", "-r", "../../passes/"+passName+".pkpass", ".")
 	err = cmd.Run()
 	if err != nil {
 		log.Println("Error executing ZIP command: ", err)
-		return "", err
+		return err
 	}
 	os.Chdir("../../../")
 	log.Printf("Creation of the pkpass %s executed successfully\n", passName)
-	return passName + ".pkpass", nil
+	return nil
 }

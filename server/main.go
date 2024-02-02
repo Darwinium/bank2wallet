@@ -10,12 +10,24 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"gorm.io/gorm"
 )
+
+var db *gorm.DB
 
 func init() {
 	err := godotenv.Load()
 	if err != nil {
 		log.Fatal("Error loading .env file")
+	} else {
+		log.Println("Loaded .env file successfully")
+	}
+
+	db, err = getDBConnection()
+	if err != nil {
+		log.Fatal("Error connecting to the database:", err)
+	} else {
+		log.Println("Connected to the database successfully")
 	}
 }
 
@@ -79,7 +91,8 @@ func main() {
 			return
 		}
 
-		pkpassName, err := CreatePass(
+		pkpass, err := GeneratePass(
+			db,
 			companyID,
 			cashback,
 			companyName,
@@ -97,13 +110,46 @@ func main() {
 			return
 		}
 
-		log.Println("Pass was created successfully", "link", serverURL+"/passes/"+pkpassName)
+		pkpassFilePath := serverURL + "/passes/" + pkpass.FileName + ".pkpass"
+
+		log.Printf("Pass was created successfully!\nLink: %s\n", pkpassFilePath)
 
 		c.JSON(200, gin.H{
 			"message":   "Pass was created successfully",
-			"link":      serverURL + "/passes/" + pkpassName,
-			"companyID": companyID,
+			"link":      pkpassFilePath,
+			"companyID": pkpass.CompanyID,
+			"passID":    pkpass.ID,
 		})
+	})
+
+	r.POST("/getPass", AuthRequired(), func(c *gin.Context) {
+		companyID := c.PostForm("companyID")
+
+		if len(companyID) == 0 {
+			c.JSON(400, gin.H{
+				"message": "Missing required fields",
+				"fields":  "companyID",
+			})
+			return
+		}
+
+		pass, err := GetPassByCompanyID(db, companyID)
+		if err != nil {
+			c.JSON(500, gin.H{
+				"message":   "Failed to get pass",
+				"error":     err.Error(),
+				"companyID": companyID,
+			})
+			return
+		}
+
+		c.JSON(200, gin.H{
+			"message":   "Pass was retrieved successfully",
+			"link":      serverURL + "/passes/" + SanitizeText(pass.CompanyName) + ".pkpass",
+			"companyID": companyID,
+			"passID":    pass.ID,
+		})
+
 	})
 
 	r.POST("/updateCashback", AuthRequired(), func(c *gin.Context) {
