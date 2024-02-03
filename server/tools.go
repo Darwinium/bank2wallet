@@ -4,11 +4,12 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"io"
-	"log"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
+
+	"github.com/rs/zerolog/log"
 )
 
 // SanitizeText sanitizes the text to be used as a filename.
@@ -115,7 +116,7 @@ func ReadRequestBody(body io.ReadCloser) string {
 	// Read the body content
 	bodyBytes, err := io.ReadAll(body)
 	if err != nil {
-		log.Println("Error reading the body:", err)
+		log.Error().Err(err).Msg("Error reading the body")
 	}
 
 	return string(bodyBytes)

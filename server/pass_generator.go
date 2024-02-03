@@ -3,10 +3,10 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"os/exec"
 
+	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
 
@@ -193,7 +193,9 @@ func GeneratePass(db *gorm.DB, companyID, cashback, companyName, iban, bic, addr
 	// Remove tmp directory of the pass
 	err = os.RemoveAll(TempDir + passName + ".pass")
 	if err != nil {
-		log.Printf("error removing tmp directory: %v", err)
+		log.Error().
+			Err(err).
+			Msg("Error removing tmp directory")
 	}
 
 	return passDB, nil
@@ -203,13 +205,22 @@ func GeneratePass(db *gorm.DB, companyID, cashback, companyName, iban, bic, addr
 func signingPassFile(passName string) error {
 	CERT_PASSWORD := os.Getenv("CERT_PASSWORD")
 	cmd := exec.Command("openssl", "smime", "-binary", "-sign", "-certfile", CertificatesDir+"WWDR.pem", "-signer", CertificatesDir+"passcertificate.pem", "-inkey", CertificatesDir+"passkey.pem", "-in", TempDir+passName+".pass/manifest.json", "-out", TempDir+passName+".pass/signature", "-outform", "DER", "-passin", "pass:"+CERT_PASSWORD)
-	log.Println(cmd.Path)
+
+	log.Debug().
+		Str("Command", cmd.Path).
+		Strs("Args", cmd.Args).
+		Msg("Signing pass with OpenSSL command")
+
 	err := cmd.Run()
 	if err != nil {
-		log.Println("Error executing OpenSSL command: ", err)
+		log.Error().
+			Err(err).
+			Msg("Error executing OpenSSL command")
 		return err
 	}
-	log.Printf("Signing of the pass %s executed successfully\n", passName)
+	log.Debug().
+		Str("passName", passName).
+		Msg("Signing of the pass executed successfully")
 	return nil
 
 }
@@ -219,17 +230,23 @@ func createPKPassFile(passName string) error {
 	// Change working directory
 	err := os.Chdir("./b2wData/tmp/" + passName + ".pass")
 	if err != nil {
-		log.Fatalf("os.Chdir() failed with %s\n", err)
+		log.Error().
+			Err(err).
+			Msg("Error changing working directory")
 		return err
 	}
 
 	cmd := exec.Command("zip", "-r", "../../passes/"+passName+".pkpass", ".")
 	err = cmd.Run()
 	if err != nil {
-		log.Println("Error executing ZIP command: ", err)
+		log.Error().
+			Err(err).
+			Msg("Error executing ZIP command")
 		return err
 	}
 	os.Chdir("../../../")
-	log.Printf("Creation of the pkpass %s executed successfully\n", passName)
+	log.Debug().
+		Str("passName", passName).
+		Msg("PKPass file created successfully")
 	return nil
 }

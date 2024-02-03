@@ -1,11 +1,11 @@
 package main
 
 import (
-	"log"
 	"os"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/rs/zerolog/log"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 )
@@ -76,7 +76,9 @@ func AddNewPass(db *gorm.DB, companyID, cashback, companyName, iban, bic, addres
 		return Pass{}, err
 	}
 
-	log.Printf("Pass updated or created: %v\n", pass)
+	log.Debug().
+		Interface("Pass", pass).
+		Msg("New pass created/updated")
 
 	return pass, nil
 }
@@ -93,7 +95,9 @@ func UpdatePassByCompanyID(db *gorm.DB, companyID, cashback string) (Pass, error
 		return Pass{}, err
 	}
 
-	log.Printf("Cashback updated: %v\n", pass)
+	log.Debug().
+		Interface("Pass", pass).
+		Msg("Cashback updated")
 
 	return pass, nil
 }

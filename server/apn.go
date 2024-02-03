@@ -1,9 +1,7 @@
 package main
 
 import (
-	"fmt"
-	"log"
-
+	"github.com/rs/zerolog/log"
 	"github.com/sideshow/apns2"
 	"github.com/sideshow/apns2/certificate"
 )
@@ -12,7 +10,9 @@ func SendNotificationPushAboutUpdate() {
 
 	cert, err := certificate.FromP12File("./certificates/Certificates.p12", "")
 	if err != nil {
-		log.Fatal("Cert Error:", err)
+		log.Error().
+			Err(err).
+			Msg("Push Certificate Error")
 	}
 
 	notification := &apns2.Notification{}
@@ -28,8 +28,12 @@ func SendNotificationPushAboutUpdate() {
 	res, err := client.Push(notification)
 
 	if err != nil {
-		log.Fatal("Error:", err)
+		log.Error().
+			Err(err).
+			Msg("Error sending push notification")
 	}
 
-	fmt.Printf("Notification result: %v\n", res)
+	log.Debug().
+		Interface("Result", res).
+		Msg("Notification result")
 }
