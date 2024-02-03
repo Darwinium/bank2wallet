@@ -24,6 +24,15 @@ type Pass struct {
 	UpdatedAt   time.Time // Automatically managed by GORM for update time
 }
 
+type DeviceRegistration struct {
+	DeviceLibraryIdentifier string    `json:"deviceLibraryIdentifier"`
+	PassTypeIdentifier      string    `json:"passTypeIdentifier"`
+	SerialNumber            string    `json:"serialNumber"`
+	PushToken               string    `json:"pushToken"`
+	CreatedAt               time.Time // Automatically managed by GORM for creation time
+	UpdatedAt               time.Time // Automatically managed by GORM for update time
+}
+
 // BeforeCreate is a GORM hook that is called before creating a new pass. It sets the ID of the pass to a new UUID.
 func (pass *Pass) BeforeCreate(tx *gorm.DB) (err error) {
 	pass.ID = uuid.New()
@@ -45,7 +54,7 @@ func getDBConnection() (*gorm.DB, error) {
 	}
 
 	// Migrate the schema
-	db.AutoMigrate(&Pass{})
+	db.AutoMigrate(&Pass{}, &DeviceRegistration{})
 
 	return db, nil
 }
@@ -97,4 +106,53 @@ func GetPassByCompanyID(db *gorm.DB, companyID string) (Pass, error) {
 	}
 
 	return pass, nil
+}
+
+func RegisterDevice(db *gorm.DB, deviceLibraryIdentifier, serialNumber, pushToken string) (DeviceRegistration, error, bool) {
+	deviceReg := DeviceRegistration{
+		DeviceLibraryIdentifier: deviceLibraryIdentifier,
+		PassTypeIdentifier:      "pass.com.finom.bank2wallet",
+		SerialNumber:            serialNumber,
+		PushToken:               pushToken,
+	}
+
+	rec := db.Where(DeviceRegistration{SerialNumber: serialNumber}).First(&deviceReg)
+	exists := rec.RowsAffected > 0
+	if exists {
+		if err := db.Model(&deviceReg).Update("push_token", pushToken).Error; err != nil {
+			return DeviceRegistration{}, err, false
+		}
+	} else {
+		if err := db.Create(&deviceReg).Error; err != nil {
+			return DeviceRegistration{}, err, false
+		}
+	}
+
+	return deviceReg, nil, exists
+}
+
+func GetPassesByDevice(db *gorm.DB, deviceLibraryIdentifier string) ([]DeviceRegistration, error) {
+	var deviceRegs []DeviceRegistration
+	if err := db.Where("device_library_identifier = ?", deviceLibraryIdentifier).Find(&deviceRegs).Error; err != nil {
+		return nil, err
+	}
+
+	return deviceRegs, nil
+}
+
+func CheckPassUpdatesRequest(db *gorm.DB, deviceLibraryIdentifier, passesUpdatedSince string) ([]Pass, error) {
+	var passes []Pass
+	if err := db.Where("updated_at > ?", passesUpdatedSince).Find(&passes).Error; err != nil {
+		return nil, err
+	}
+
+	return passes, nil
+}
+
+func DeletePassOnDevice(db *gorm.DB, serialNumber string) error {
+	if err := db.Where("serial_number = ?", serialNumber).Delete(&DeviceRegistration{}).Error; err != nil {
+		return err
+	}
+
+	return nil
 }

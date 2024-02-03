@@ -5,6 +5,7 @@ import (
 	"log"
 	"net/http"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/gin-contrib/cors"
@@ -54,7 +55,7 @@ func main() {
 
 	r.StaticFS("/passes", gin.Dir("./b2wData/passes", false))
 
-	r.POST("/create", AuthRequired(), func(c *gin.Context) {
+	r.POST("pass/v1/create", AuthRequired(), func(c *gin.Context) {
 		companyID := c.PostForm("companyID")
 		cashback := c.PostForm("cashback") + "€"
 		log.Println(c.Request.MultipartForm)
@@ -122,7 +123,7 @@ func main() {
 		})
 	})
 
-	r.POST("/getPass", AuthRequired(), func(c *gin.Context) {
+	r.POST("pass/v1/getPass", AuthRequired(), func(c *gin.Context) {
 		companyID := c.PostForm("companyID")
 
 		if len(companyID) == 0 {
@@ -152,7 +153,7 @@ func main() {
 
 	})
 
-	r.POST("/updateCashback", AuthRequired(), func(c *gin.Context) {
+	r.POST("pass/v1/updateCashback", AuthRequired(), func(c *gin.Context) {
 		companyID := c.PostForm("companyID")
 		cashback := c.PostForm("cashback") + "€"
 
@@ -182,12 +183,23 @@ func main() {
 			return
 		}
 
+		// TODO: Add generating updated file
+		SendNotificationPushAboutUpdate()
+
 		c.JSON(200, gin.H{
 			"message":   "Cashback was updated successfully",
 			"link":      serverURL + "/passes/" + pass.ID.String() + ".pkpass",
 			"companyID": companyID,
 		})
 	})
+
+	// --- Apple Wallet Requests BEGIN --- //
+	r.POST("/pass/v1/registerDevice/v1/devices/:deviceLibraryIdentifier/registrations/:passTeamIdentifier/:serialNumber", AuthRequired(), registerDeviceRequest)
+	r.GET("/pass/v1/registerDevice/v1/devices/:deviceLibraryIdentifier/registrations/:passTeamIdentifier", checkPassUpdatesRequest)
+	r.GET("/pass/v1/registerDevice/v1/passes/:passTeamIdentifier/:serialNumber", AuthRequired(), getUpdatedPasses)
+	r.DELETE("/pass/v1/registerDevice/v1/devices/:deviceLibraryIdentifier/registrations/:passTeamIdentifier/:serialNumber", deletePassRequest)
+	r.POST("/pass/v1/registerDevice/v1/log", logRequest)
+	// --- Apple Wallet Requests END --- //
 
 	if err := r.Run(serverURL); err != nil {
 		log.Fatal("Server run failed:", err)
@@ -197,9 +209,8 @@ func main() {
 func AuthRequired() gin.HandlerFunc {
 	return func(c *gin.Context) {
 		token := c.GetHeader("Authorization")
+		token = strings.TrimPrefix(token, "ApplePass ")
 
-		// Here we are just checking if the token is what we expect. In a real-world application,
-		// you would probably use a more sophisticated way to validate the token, like JWT.
 		if token != os.Getenv("AUTH_TOKEN") {
 			c.JSON(http.StatusUnauthorized, gin.H{
 				"error": "Unauthorized",
@@ -211,3 +222,129 @@ func AuthRequired() gin.HandlerFunc {
 		c.Next()
 	}
 }
+
+// --- Apple Wallet Requests BEGIN --- //
+
+type pushTokenRequest struct {
+	PushToken string `json:"pushToken"`
+}
+
+func registerDeviceRequest(c *gin.Context) {
+	deviceLibraryIdentifier := c.Param("deviceLibraryIdentifier")
+	serialNumber := c.Param("serialNumber")
+
+	var req pushTokenRequest
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+		return
+	}
+	pushToken := req.PushToken
+
+	deviceReg, err, exists := RegisterDevice(db, deviceLibraryIdentifier, serialNumber, pushToken)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	}
+
+	log.Printf("New pass registered for notifications. SerialNumber: %v, PushToken: %v\n", deviceReg.SerialNumber, deviceReg.PushToken)
+
+	if exists {
+		c.JSON(200, gin.H{})
+	} else {
+		c.JSON(201, gin.H{})
+	}
+}
+
+func checkPassUpdatesRequest(c *gin.Context) {
+	log.Printf("Request if there's any updates. Query: %v\n", c.Request.URL.Query())
+
+	previousLastUpdated := c.Query("passesUpdatedSince")
+	deviceLibraryIdentifier := c.Param("deviceLibraryIdentifier")
+
+	if len(previousLastUpdated) == 0 {
+		passesSNByDevice, err := GetPassesByDevice(db, deviceLibraryIdentifier)
+		if err != nil {
+			log.Printf("Error getting passes by device: %v\n", err)
+		} else {
+			serialNumbers := make([]string, 0, len(passesSNByDevice))
+			// Loop through the passes and extract the serial number from each
+			for _, pass := range passesSNByDevice {
+				serialNumbers = append(serialNumbers, pass.SerialNumber)
+			}
+
+			lastUpdated := time.Now().UTC().Format(time.RFC3339)
+			// Construct the response object
+			response := gin.H{
+				"lastUpdated":   lastUpdated, // Use the actual last update timestamp of your passes here
+				"serialNumbers": serialNumbers,
+			}
+			log.Println(response)
+			c.JSON(200, response)
+		}
+	} else {
+		updatedPasses, err := CheckPassUpdatesRequest(db, deviceLibraryIdentifier, previousLastUpdated)
+		if err != nil {
+			log.Println(err)
+		}
+
+		if len(updatedPasses) == 0 {
+			log.Println("No Matching Passes")
+			c.JSON(204, gin.H{})
+		} else {
+			log.Println("Matching Passes Found")
+			serialNumbers := make([]string, 0, len(updatedPasses))
+			// Loop through the passes and extract the serial number from each
+			for _, pass := range updatedPasses {
+				serialNumbers = append(serialNumbers, pass.ID.String())
+			}
+			lastUpdated := time.Now().UTC().Format(time.RFC3339)
+			// Construct the response object
+			response := gin.H{
+				"lastUpdated":   lastUpdated, // Use the actual last update timestamp of your passes here
+				"serialNumbers": serialNumbers,
+			}
+			log.Println(response)
+			c.JSON(200, response)
+		}
+	}
+}
+
+func getUpdatedPasses(c *gin.Context) {
+	serialNumber := c.Param("serialNumber")
+	log.Println("Request for pass with serial number:", serialNumber)
+
+	filePath := "./b2wData/passes/" + serialNumber + ".pkpass"
+	// Read the .pkpass file content
+	pkpassContent, err := os.ReadFile(filePath)
+	if err != nil {
+		log.Printf("Failed to read .pkpass file: %v", err)
+		c.Status(http.StatusInternalServerError)
+		return
+	}
+	// Set the correct Content-Type headers
+	lastModifiedTime := time.Now().UTC().Format(http.TimeFormat)
+	c.Header("Last-Modified", lastModifiedTime)
+	c.Header("Content-Type", "application/vnd.apple.pkpass")
+	// Send the .pkpass file content as the response
+	c.Writer.Write(pkpassContent)
+}
+
+func deletePassRequest(c *gin.Context) {
+	serialNumber := c.Param("serialNumber")
+	err := DeletePassOnDevice(db, serialNumber)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+		return
+	} else {
+		c.JSON(http.StatusOK, gin.H{})
+	}
+
+	log.Printf("Pass on device was unregistered. SerialNumber: %v\n", serialNumber)
+}
+
+func logRequest(c *gin.Context) {
+	log.Println(ReadRequestBody(c.Request.Body))
+	c.JSON(http.StatusOK, gin.H{})
+}
+
+// --- Apple Wallet Requests END --- //

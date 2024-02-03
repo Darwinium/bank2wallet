@@ -4,6 +4,7 @@ import (
 	"crypto/sha1"
 	"encoding/hex"
 	"io"
+	"log"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -108,4 +109,14 @@ func CopyImages(srcDir, dstDir string) (map[string]string, error) {
 	}
 
 	return manifest, nil
+}
+
+func ReadRequestBody(body io.ReadCloser) string {
+	// Read the body content
+	bodyBytes, err := io.ReadAll(body)
+	if err != nil {
+		log.Println("Error reading the body:", err)
+	}
+
+	return string(bodyBytes)
 }
