@@ -224,6 +224,19 @@ func updateCashback(c *gin.Context) {
 	}
 
 	// TODO: Add generating updated file
+	pass, err = GeneratePass(
+		db,
+		pass.CompanyID,
+		pass.Cashback,
+		pass.CompanyName,
+		pass.IBAN,
+		pass.BIC,
+		pass.Address,
+	)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to generate new pass")
+	}
+
 	SendNotificationPushAboutUpdate()
 
 	c.JSON(200, gin.H{
