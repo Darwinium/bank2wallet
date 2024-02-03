@@ -116,11 +116,13 @@ func RegisterDevice(db *gorm.DB, deviceLibraryIdentifier, serialNumber, pushToke
 		PushToken:               pushToken,
 	}
 
-	rec := db.Where(DeviceRegistration{SerialNumber: serialNumber}).First(&deviceReg)
+	rec := db.Where(DeviceRegistration{SerialNumber: serialNumber}).Find(&deviceReg)
 	exists := rec.RowsAffected > 0
 	if exists {
-		if err := db.Model(&deviceReg).Update("push_token", pushToken).Error; err != nil {
-			return DeviceRegistration{}, err, false
+		if deviceReg.PushToken != pushToken {
+			if err := db.Model(&deviceReg).Update("push_token", pushToken).Error; err != nil {
+				return DeviceRegistration{}, err, false
+			}
 		}
 	} else {
 		if err := db.Create(&deviceReg).Error; err != nil {
@@ -131,22 +133,32 @@ func RegisterDevice(db *gorm.DB, deviceLibraryIdentifier, serialNumber, pushToke
 	return deviceReg, nil, exists
 }
 
-func GetPassesByDevice(db *gorm.DB, deviceLibraryIdentifier string) ([]DeviceRegistration, error) {
+func GetPassesByDeviceID(db *gorm.DB, deviceLibraryIdentifier string) ([]string, error) {
 	var deviceRegs []DeviceRegistration
 	if err := db.Where("device_library_identifier = ?", deviceLibraryIdentifier).Find(&deviceRegs).Error; err != nil {
 		return nil, err
 	}
 
-	return deviceRegs, nil
+	serialNumbers := make([]string, 0, len(deviceRegs))
+	for _, deviceReg := range deviceRegs {
+		serialNumbers = append(serialNumbers, deviceReg.SerialNumber)
+	}
+
+	return serialNumbers, nil
 }
 
-func CheckPassUpdatesRequest(db *gorm.DB, deviceLibraryIdentifier, passesUpdatedSince string) ([]Pass, error) {
+func GetUpdatedPasses(db *gorm.DB, deviceLibraryIdentifier, passesUpdatedSince string) ([]string, error) {
 	var passes []Pass
 	if err := db.Where("updated_at > ?", passesUpdatedSince).Find(&passes).Error; err != nil {
 		return nil, err
 	}
 
-	return passes, nil
+	serialNumbers := make([]string, 0, len(passes))
+	for _, pass := range passes {
+		serialNumbers = append(serialNumbers, pass.ID.String())
+	}
+
+	return serialNumbers, nil
 }
 
 func DeletePassOnDevice(db *gorm.DB, serialNumber string) error {

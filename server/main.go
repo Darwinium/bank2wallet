@@ -272,52 +272,52 @@ func checkPassUpdatesRequest(c *gin.Context) {
 	previousLastUpdated := c.Query("passesUpdatedSince")
 	deviceLibraryIdentifier := c.Param("deviceLibraryIdentifier")
 
+	var (
+		serialNumbers []string
+		err           error
+	)
+
+	// Check if it is the first request from the device
 	if len(previousLastUpdated) == 0 {
-		passesSNByDevice, err := GetPassesByDevice(db, deviceLibraryIdentifier)
-		if err != nil {
-			log.Error().Err(err).Msg("Error getting passes by device")
-		} else {
-			serialNumbers := make([]string, 0, len(passesSNByDevice))
-			// Loop through the passes and extract the serial number from each
-			for _, pass := range passesSNByDevice {
-				serialNumbers = append(serialNumbers, pass.SerialNumber)
-			}
-
-			lastUpdated := time.Now().UTC().Format(time.RFC3339)
-			// Construct the response object
-			response := gin.H{
-				"lastUpdated":   lastUpdated, // Use the actual last update timestamp of your passes here
-				"serialNumbers": serialNumbers,
-			}
-			log.Debug().Msgf("Response: %v\n", response)
-			c.JSON(200, response)
-		}
+		// Get all passes for the device
+		serialNumbers, err = GetPassesByDeviceID(db, deviceLibraryIdentifier)
 	} else {
-		updatedPasses, err := CheckPassUpdatesRequest(db, deviceLibraryIdentifier, previousLastUpdated)
-		if err != nil {
-			log.Error().Err(err)
-		}
-
-		if len(updatedPasses) == 0 {
-			log.Warn().Msg("No matching passes found")
-			c.JSON(204, gin.H{})
-		} else {
-			log.Info().Msg("Matching Passes Found")
-			serialNumbers := make([]string, 0, len(updatedPasses))
-			// Loop through the passes and extract the serial number from each
-			for _, pass := range updatedPasses {
-				serialNumbers = append(serialNumbers, pass.ID.String())
-			}
-			lastUpdated := time.Now().UTC().Format(time.RFC3339)
-			// Construct the response object
-			response := gin.H{
-				"lastUpdated":   lastUpdated, // Use the actual last update timestamp of your passes here
-				"serialNumbers": serialNumbers,
-			}
-			log.Debug().Msgf("Response: %v\n", response)
-			c.JSON(200, response)
-		}
+		// Get updated passes for the device
+		serialNumbers, err = GetUpdatedPasses(db, deviceLibraryIdentifier, previousLastUpdated)
 	}
+
+	if err != nil {
+		log.Error().Err(err)
+		return
+	}
+
+	if len(serialNumbers) == 0 {
+		log.Info().
+			Str("DeviceLibraryIdentifier", deviceLibraryIdentifier).
+			Msg("No matching passes found for the device")
+
+		// 204 — No Matching Passes
+		c.JSON(204, gin.H{})
+		return
+	}
+
+	log.Info().
+		Str("DeviceLibraryIdentifier", deviceLibraryIdentifier).
+		Msg("Matching passes found for the device")
+
+	// Update the lastUpdated timestamp of the device
+	lastUpdated := time.Now().UTC().Format(time.RFC3339)
+	response := gin.H{
+		"lastUpdated":   lastUpdated,
+		"serialNumbers": serialNumbers,
+	}
+	log.Debug().
+		Interface("Response", response).
+		Str("DeviceLibraryIdentifier", deviceLibraryIdentifier).
+		Str("LastUpdated", lastUpdated)
+
+	// 200 — Matching Passes Found
+	c.JSON(200, response)
 }
 
 func getUpdatedPass(c *gin.Context) {
