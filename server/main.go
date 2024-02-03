@@ -195,7 +195,7 @@ func getPass(c *gin.Context) {
 
 func updateCashback(c *gin.Context) {
 	companyID := c.PostForm("companyID")
-	cashback := c.PostForm("cashback") + "€"
+	cashback := c.PostForm("cashback")
 
 	missingFields := []string{}
 	if companyID == "" {
@@ -211,6 +211,8 @@ func updateCashback(c *gin.Context) {
 			"fields":  missingFields,
 		})
 		return
+	} else {
+		cashback += "€"
 	}
 
 	pass, err := UpdatePassByCompanyID(db, companyID, cashback)
