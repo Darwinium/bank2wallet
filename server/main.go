@@ -2,7 +2,6 @@ package main
 
 import (
 	"flag"
-	"log"
 	"net/http"
 	"os"
 	"strings"
@@ -11,33 +10,41 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
 	"gorm.io/gorm"
 )
 
 var db *gorm.DB
+var serverURL string
+
+type pushTokenRequest struct {
+	PushToken string `json:"pushToken"`
+}
 
 func init() {
+	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+
 	err := godotenv.Load()
 	if err != nil {
-		log.Fatal("Error loading .env file")
+		log.Fatal().Msg("Error loading .env file")
 	} else {
-		log.Println("Loaded .env file successfully")
+		log.Info().Msg("Loaded .env file successfully")
 	}
+
+	port := flag.String("port", "8080", "Port to run the server on")
+	flag.Parse()
+	serverURL = os.Getenv("SERVER_URL") + ":" + *port
 
 	db, err = getDBConnection()
 	if err != nil {
-		log.Fatal("Error connecting to the database:", err)
+		log.Fatal().Err(err).Msg("Error connecting to the database")
 	} else {
-		log.Println("Connected to the database successfully")
+		log.Info().Msg("Connected to the database successfully")
 	}
 }
 
 func main() {
-	port := flag.String("port", "8080", "Port to run the server on")
-	flag.Parse()
-
-	serverURL := "localhost:" + *port
-
 	r := gin.Default()
 	// Configuring CORS
 	r.Use(cors.New(cors.Config{
@@ -55,154 +62,20 @@ func main() {
 
 	r.StaticFS("/passes", gin.Dir("./b2wData/passes", false))
 
-	r.POST("pass/v1/create", AuthRequired(), func(c *gin.Context) {
-		companyID := c.PostForm("companyID")
-		cashback := c.PostForm("cashback") + "€"
-		log.Println(c.Request.MultipartForm)
-		companyName := c.PostForm("companyName")
-		iban := c.PostForm("iban")
-		bic := c.PostForm("bic")
-		address := c.PostForm("address")
-
-		missingFields := []string{}
-		if companyID == "" {
-			missingFields = append(missingFields, "companyID")
-		}
-		if cashback == "" {
-			cashback = "0" + "€"
-		}
-		if companyName == "" {
-			missingFields = append(missingFields, "companyName")
-		}
-		if iban == "" {
-			missingFields = append(missingFields, "iban")
-		}
-		if bic == "" {
-			missingFields = append(missingFields, "bic")
-		}
-		if address == "" {
-			missingFields = append(missingFields, "address")
-		}
-
-		if len(missingFields) > 0 {
-			c.JSON(400, gin.H{
-				"message": "Missing required fields",
-				"fields":  missingFields,
-			})
-			return
-		}
-
-		pass, err := GeneratePass(
-			db,
-			companyID,
-			cashback,
-			companyName,
-			iban,
-			bic,
-			address,
-		)
-		if err != nil {
-			log.Println("Failed to create pass:", err)
-			c.JSON(500, gin.H{
-				"message":   "Failed to create pass",
-				"error":     err.Error(),
-				"companyID": companyID,
-			})
-			return
-		}
-
-		pkpassFilePath := serverURL + "/passes/" + pass.ID.String() + ".pkpass"
-
-		log.Printf("Pass was created successfully!\nLink: %s\n", pkpassFilePath)
-
-		c.JSON(200, gin.H{
-			"message":   "Pass was created successfully",
-			"link":      pkpassFilePath,
-			"companyID": pass.CompanyID,
-			"passID":    pass.ID,
-		})
-	})
-
-	r.POST("pass/v1/getPass", AuthRequired(), func(c *gin.Context) {
-		companyID := c.PostForm("companyID")
-
-		if len(companyID) == 0 {
-			c.JSON(400, gin.H{
-				"message": "Missing required fields",
-				"fields":  "companyID",
-			})
-			return
-		}
-
-		pass, err := GetPassByCompanyID(db, companyID)
-		if err != nil {
-			c.JSON(500, gin.H{
-				"message":   "Failed to get pass",
-				"error":     err.Error(),
-				"companyID": companyID,
-			})
-			return
-		}
-
-		c.JSON(200, gin.H{
-			"message":   "Pass was retrieved successfully",
-			"link":      serverURL + "/passes/" + pass.ID.String() + ".pkpass",
-			"companyID": companyID,
-			"passID":    pass.ID,
-		})
-
-	})
-
-	r.POST("pass/v1/updateCashback", AuthRequired(), func(c *gin.Context) {
-		companyID := c.PostForm("companyID")
-		cashback := c.PostForm("cashback") + "€"
-
-		missingFields := []string{}
-		if companyID == "" {
-			missingFields = append(missingFields, "companyID")
-		}
-		if cashback == "" {
-			missingFields = append(missingFields, "cashback")
-		}
-
-		if len(missingFields) > 0 {
-			c.JSON(400, gin.H{
-				"message": "Missing required fields during the update of cashback",
-				"fields":  missingFields,
-			})
-			return
-		}
-
-		pass, err := UpdatePassByCompanyID(db, companyID, cashback)
-		if err != nil {
-			c.JSON(500, gin.H{
-				"message":   "Failed to get pass",
-				"error":     err.Error(),
-				"companyID": companyID,
-			})
-			return
-		}
-
-		// TODO: Add generating updated file
-		SendNotificationPushAboutUpdate()
-
-		c.JSON(200, gin.H{
-			"message":   "Cashback was updated successfully",
-			"link":      serverURL + "/passes/" + pass.ID.String() + ".pkpass",
-			"companyID": companyID,
-		})
-	})
+	r.POST("pass/v1/create", AuthRequired(), createPass)
+	r.POST("pass/v1/getPass", AuthRequired(), getPass)
+	r.POST("pass/v1/updateCashback", AuthRequired(), updateCashback)
 
 	// --- Apple Wallet Requests BEGIN --- //
 	r.POST("/pass/v1/registerDevice/v1/devices/:deviceLibraryIdentifier/registrations/:passTeamIdentifier/:serialNumber", AuthRequired(), registerDeviceRequest)
 	r.GET("/pass/v1/registerDevice/v1/devices/:deviceLibraryIdentifier/registrations/:passTeamIdentifier", checkPassUpdatesRequest)
-	r.GET("/pass/v1/registerDevice/v1/passes/:passTeamIdentifier/:serialNumber", AuthRequired(), getUpdatedPasses)
+	r.GET("/pass/v1/registerDevice/v1/passes/:passTeamIdentifier/:serialNumber", AuthRequired(), getUpdatedPass)
 	r.DELETE("/pass/v1/registerDevice/v1/devices/:deviceLibraryIdentifier/registrations/:passTeamIdentifier/:serialNumber", deletePassRequest)
 	r.POST("/pass/v1/registerDevice/v1/log", logRequest)
 	// --- Apple Wallet Requests END --- //
 
 	if err := r.Run(serverURL); err != nil {
-		log.Fatal("Server run failed:", err)
+		log.Fatal().Err(err).Msg("Server run failed")
 	}
 }
 
@@ -223,11 +96,144 @@ func AuthRequired() gin.HandlerFunc {
 	}
 }
 
-// --- Apple Wallet Requests BEGIN --- //
+func createPass(c *gin.Context) {
+	companyID := c.PostForm("companyID")
+	cashback := c.PostForm("cashback") + "€"
+	log.Debug().Any("Request", c.Request.MultipartForm)
+	companyName := c.PostForm("companyName")
+	iban := c.PostForm("iban")
+	bic := c.PostForm("bic")
+	address := c.PostForm("address")
 
-type pushTokenRequest struct {
-	PushToken string `json:"pushToken"`
+	missingFields := []string{}
+	if companyID == "" {
+		missingFields = append(missingFields, "companyID")
+	}
+	if cashback == "" {
+		cashback = "0" + "€"
+	}
+	if companyName == "" {
+		missingFields = append(missingFields, "companyName")
+	}
+	if iban == "" {
+		missingFields = append(missingFields, "iban")
+	}
+	if bic == "" {
+		missingFields = append(missingFields, "bic")
+	}
+	if address == "" {
+		missingFields = append(missingFields, "address")
+	}
+
+	if len(missingFields) > 0 {
+		c.JSON(400, gin.H{
+			"message": "Missing required fields",
+			"fields":  missingFields,
+		})
+		return
+	}
+
+	pass, err := GeneratePass(
+		db,
+		companyID,
+		cashback,
+		companyName,
+		iban,
+		bic,
+		address,
+	)
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to create pass")
+		c.JSON(500, gin.H{
+			"message":   "Failed to create pass",
+			"error":     err.Error(),
+			"companyID": companyID,
+		})
+		return
+	}
+
+	pkpassFilePath := serverURL + "/passes/" + pass.ID.String() + ".pkpass"
+	log.Debug().Msgf("Pass was created successfully!\nLink: %s\n", pkpassFilePath)
+
+	c.JSON(200, gin.H{
+		"message":   "Pass was created successfully",
+		"link":      pkpassFilePath,
+		"companyID": pass.CompanyID,
+		"passID":    pass.ID,
+	})
 }
+
+func getPass(c *gin.Context) {
+	companyID := c.PostForm("companyID")
+
+	if len(companyID) == 0 {
+		c.JSON(400, gin.H{
+			"message": "Missing required fields",
+			"fields":  "companyID",
+		})
+		return
+	}
+
+	pass, err := GetPassByCompanyID(db, companyID)
+	if err != nil {
+		c.JSON(500, gin.H{
+			"message":   "Failed to get pass",
+			"error":     err.Error(),
+			"companyID": companyID,
+		})
+		return
+	}
+
+	c.JSON(200, gin.H{
+		"message":   "Pass was retrieved successfully",
+		"link":      serverURL + "/passes/" + pass.ID.String() + ".pkpass",
+		"companyID": companyID,
+		"passID":    pass.ID,
+	})
+
+}
+
+func updateCashback(c *gin.Context) {
+	companyID := c.PostForm("companyID")
+	cashback := c.PostForm("cashback") + "€"
+
+	missingFields := []string{}
+	if companyID == "" {
+		missingFields = append(missingFields, "companyID")
+	}
+	if cashback == "" {
+		missingFields = append(missingFields, "cashback")
+	}
+
+	if len(missingFields) > 0 {
+		c.JSON(400, gin.H{
+			"message": "Missing required fields during the update of cashback",
+			"fields":  missingFields,
+		})
+		return
+	}
+
+	pass, err := UpdatePassByCompanyID(db, companyID, cashback)
+	if err != nil {
+		c.JSON(500, gin.H{
+			"message":   "Failed to get pass",
+			"error":     err.Error(),
+			"companyID": companyID,
+		})
+		return
+	}
+
+	// TODO: Add generating updated file
+	SendNotificationPushAboutUpdate()
+
+	c.JSON(200, gin.H{
+		"message":   "Cashback was updated successfully",
+		"link":      serverURL + "/passes/" + pass.ID.String() + ".pkpass",
+		"companyID": companyID,
+	})
+}
+
+// --- Apple Wallet Requests BEGIN --- //
 
 func registerDeviceRequest(c *gin.Context) {
 	deviceLibraryIdentifier := c.Param("deviceLibraryIdentifier")
@@ -246,7 +252,10 @@ func registerDeviceRequest(c *gin.Context) {
 		return
 	}
 
-	log.Printf("New pass registered for notifications. SerialNumber: %v, PushToken: %v\n", deviceReg.SerialNumber, deviceReg.PushToken)
+	log.Info().
+		Str("SerialNumber", deviceReg.SerialNumber).
+		Str("PushToken", deviceReg.PushToken).
+		Msg("Registration of the new pass")
 
 	if exists {
 		c.JSON(200, gin.H{})
@@ -256,7 +265,9 @@ func registerDeviceRequest(c *gin.Context) {
 }
 
 func checkPassUpdatesRequest(c *gin.Context) {
-	log.Printf("Request if there's any updates. Query: %v\n", c.Request.URL.Query())
+	log.Info().
+		Interface("Query", c.Request.URL.Query()).
+		Msg("Request to check updates")
 
 	previousLastUpdated := c.Query("passesUpdatedSince")
 	deviceLibraryIdentifier := c.Param("deviceLibraryIdentifier")
@@ -264,7 +275,7 @@ func checkPassUpdatesRequest(c *gin.Context) {
 	if len(previousLastUpdated) == 0 {
 		passesSNByDevice, err := GetPassesByDevice(db, deviceLibraryIdentifier)
 		if err != nil {
-			log.Printf("Error getting passes by device: %v\n", err)
+			log.Error().Err(err).Msg("Error getting passes by device")
 		} else {
 			serialNumbers := make([]string, 0, len(passesSNByDevice))
 			// Loop through the passes and extract the serial number from each
@@ -278,20 +289,20 @@ func checkPassUpdatesRequest(c *gin.Context) {
 				"lastUpdated":   lastUpdated, // Use the actual last update timestamp of your passes here
 				"serialNumbers": serialNumbers,
 			}
-			log.Println(response)
+			log.Debug().Msgf("Response: %v\n", response)
 			c.JSON(200, response)
 		}
 	} else {
 		updatedPasses, err := CheckPassUpdatesRequest(db, deviceLibraryIdentifier, previousLastUpdated)
 		if err != nil {
-			log.Println(err)
+			log.Error().Err(err)
 		}
 
 		if len(updatedPasses) == 0 {
-			log.Println("No Matching Passes")
+			log.Warn().Msg("No matching passes found")
 			c.JSON(204, gin.H{})
 		} else {
-			log.Println("Matching Passes Found")
+			log.Info().Msg("Matching Passes Found")
 			serialNumbers := make([]string, 0, len(updatedPasses))
 			// Loop through the passes and extract the serial number from each
 			for _, pass := range updatedPasses {
@@ -303,21 +314,23 @@ func checkPassUpdatesRequest(c *gin.Context) {
 				"lastUpdated":   lastUpdated, // Use the actual last update timestamp of your passes here
 				"serialNumbers": serialNumbers,
 			}
-			log.Println(response)
+			log.Debug().Msgf("Response: %v\n", response)
 			c.JSON(200, response)
 		}
 	}
 }
 
-func getUpdatedPasses(c *gin.Context) {
+func getUpdatedPass(c *gin.Context) {
 	serialNumber := c.Param("serialNumber")
-	log.Println("Request for pass with serial number:", serialNumber)
+	log.Info().
+		Str("SerialNumber", serialNumber).
+		Msg("Request for updated pass")
 
 	filePath := "./b2wData/passes/" + serialNumber + ".pkpass"
 	// Read the .pkpass file content
 	pkpassContent, err := os.ReadFile(filePath)
 	if err != nil {
-		log.Printf("Failed to read .pkpass file: %v", err)
+		log.Error().Msgf("Failed to read .pkpass file: %v", err)
 		c.Status(http.StatusInternalServerError)
 		return
 	}
@@ -339,11 +352,13 @@ func deletePassRequest(c *gin.Context) {
 		c.JSON(http.StatusOK, gin.H{})
 	}
 
-	log.Printf("Pass on device was unregistered. SerialNumber: %v\n", serialNumber)
+	log.Info().
+		Str("SerialNumber", serialNumber).
+		Msg("Pass was unregistered")
 }
 
 func logRequest(c *gin.Context) {
-	log.Println(ReadRequestBody(c.Request.Body))
+	log.Debug().Msgf("Request: %v\n", ReadRequestBody(c.Request.Body))
 	c.JSON(http.StatusOK, gin.H{})
 }
 
