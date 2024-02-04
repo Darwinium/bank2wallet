@@ -42,7 +42,7 @@ func init() {
 		Str("APP_ENV", os.Getenv("APP_ENV")).
 		Str("GIN_MODE", os.Getenv("GIN_MODE")).
 		Str("SERVER_URL", os.Getenv("SERVER_URL")).
-		Str("WEB_SERVER_URL", os.Getenv("WEB_SERVER_URL")).
+		Str("WEB_SERVICE_URL", os.Getenv("WEB_SERVICE_URL")).
 		Str("POSTGRES_HOST", os.Getenv("POSTGRES_HOST")).
 		Str("POSTGRES_USER", os.Getenv("POSTGRES_USER")).
 		Str("POSTGRES_DB", os.Getenv("POSTGRES_DB")).
