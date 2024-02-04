@@ -24,13 +24,29 @@ type pushTokenRequest struct {
 
 func init() {
 	log.Logger = log.Output(zerolog.ConsoleWriter{Out: os.Stderr})
+	var err error
 
-	err := godotenv.Load()
-	if err != nil {
-		log.Fatal().Msg("Error loading .env file")
+	if os.Getenv("APP_ENV") != "release" {
+		err = godotenv.Load()
+		log.Info().Msg("Development mode. On production, set APP_ENV=release to load environment variables from system and not from file.")
+		if err != nil {
+			log.Fatal().Msg("Error loading .env file")
+		} else {
+			log.Info().Msg("Loaded .env file successfully")
+		}
 	} else {
-		log.Info().Msg("Loaded .env file successfully")
+		log.Info().Msg("Production mode. Loading environment variables from system.")
 	}
+
+	log.Info().
+		Str("APP_ENV", os.Getenv("APP_ENV")).
+		Str("GIN_MODE", os.Getenv("GIN_MODE")).
+		Str("SERVER_URL", os.Getenv("SERVER_URL")).
+		Str("WEB_SERVER_URL", os.Getenv("WEB_SERVER_URL")).
+		Str("POSTGRES_HOST", os.Getenv("POSTGRES_HOST")).
+		Str("POSTGRES_USER", os.Getenv("POSTGRES_USER")).
+		Str("POSTGRES_DB", os.Getenv("POSTGRES_DB")).
+		Msg("Loaded Environment Variables")
 
 	port := flag.String("port", "8080", "Port to run the server on")
 	flag.Parse()

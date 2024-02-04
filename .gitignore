@@ -8,3 +8,4 @@ certificates
 .env
 bank2wallet
 .vscode
+server/.env.docker

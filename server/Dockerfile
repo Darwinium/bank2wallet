@@ -1,3 +1,5 @@
+# Build: docker build -t b2w-server:latest .
+# Run: docker run --env-file .env.docker -p 8080:8080 -v b2w_volume:/app/b2wData b2w-server:latest
 # Use an official Golang runtime as a parent image
 FROM golang:latest
 
@@ -10,7 +12,7 @@ COPY template/ /app/template/
 COPY *.go /app/
 COPY go.mod /app/
 COPY go.sum /app/
-COPY .env /app/
+# COPY .env /app/
 
 # Create the working directories
 RUN mkdir -p /app/b2wData

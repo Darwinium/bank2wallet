@@ -67,7 +67,7 @@ func CreatePassStructure(pass Pass) PassData {
 		FormatVersion:       1,
 		PassTypeIdentifier:  "pass.com.finom.bank2wallet",
 		SerialNumber:        serialNumber,
-		WebServiceURL:       "https://creative-smoothly-cockatoo.ngrok-free.app/pass/v1/registerDevice",
+		WebServiceURL:       os.Getenv("WEB_SERVICE_URL") + "/pass/v1/registerDevice",
 		AuthenticationToken: os.Getenv("AUTH_TOKEN"),
 		TeamIdentifier:      "35XPTK6L36",
 		OrganizationName:    "Finom",
