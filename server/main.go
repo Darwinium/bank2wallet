@@ -168,7 +168,7 @@ func createPass(c *gin.Context) {
 		return
 	}
 
-	pkpassFilePath := serverURL + "/passes/" + pass.ID.String() + ".pkpass"
+	pkpassFilePath := os.Getenv("WEB_SERVICE_URL") + "/passes/" + pass.ID.String() + ".pkpass"
 	log.Debug().Msgf("Pass was created successfully!\nLink: %s\n", pkpassFilePath)
 
 	c.JSON(200, gin.H{

@@ -1,5 +1,7 @@
 # Build: docker build -t b2w-server:latest .
 # Run: docker run --env-file .env.docker -p 8080:8080 -v b2w_volume:/app/b2wData b2w-server:latest
+# Posgress: docker run --name b2w-postgres -e POSTGRES_PASSWORD= -d -p 5432:5432 postgres:latest
+# PGAdmin: docker run --name b2w-pgadmin -p 5050:5050 -e PGADMIN_DEFAULT_EMAIL= -e PGADMIN_DEFAULT_PASSWORD= -d dpage/pgadmin4:latest
 # Use an official Golang runtime as a parent image
 FROM golang:latest
 
