@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"time"
 
@@ -44,11 +45,31 @@ func getDBConnection() (*gorm.DB, error) {
 	dsn := "host=" + os.Getenv("POSTGRES_HOST") +
 		" user=" + os.Getenv("POSTGRES_USER") +
 		" password=" + os.Getenv("POSTGRES_PASSWORD") +
-		" dbname=" + os.Getenv("POSTGRES_DB") +
 		" port=" + os.Getenv("POSTGRES_PORT") +
 		" sslmode=disable TimeZone=Etc/UTC"
 
 	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	if err != nil {
+		return nil, err
+	}
+
+	// Check if the database exists, and create it if it does not
+	err = db.Exec("CREATE DATABASE " + os.Getenv("POSTGRES_DB")).Error
+	if err != nil {
+		log.Info().Err(err).Msg("Database creation failed or it might already exist")
+	} else {
+		log.Info().Msg("Database created successfully")
+	}
+
+	// Close the initial connection
+	sqlDB, err := db.DB()
+	if err != nil {
+		log.Error().Err(err).Msg("Failed to close the database")
+	}
+	sqlDB.Close()
+
+	dsn = fmt.Sprintf("%s dbname=%s", dsn, os.Getenv("POSTGRES_DB"))
+	db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		return nil, err
 	}
