@@ -57,7 +57,10 @@ func getDBConnection() (*gorm.DB, error) {
 	databaseName := os.Getenv("POSTGRES_DB")
 
 	// Check if the database exists
-	var dbName string
+	var (
+		dbName          string
+		isDatabaseExist bool
+	)
 	err = db.Raw("SELECT datname FROM pg_database WHERE datname = ?", databaseName).Scan(&dbName).Error
 	if err != nil {
 		log.Error().Err(err).Msg("Failed to query database existence")
@@ -71,8 +74,10 @@ func getDBConnection() (*gorm.DB, error) {
 		} else {
 			log.Info().Msgf("Database %s created successfully", databaseName)
 		}
+		isDatabaseExist = false
 	} else {
 		log.Info().Msgf("Database %s already exists, skipping creation", databaseName)
+		isDatabaseExist = true
 	}
 
 	// Close the initial connection
@@ -88,12 +93,14 @@ func getDBConnection() (*gorm.DB, error) {
 		return nil, err
 	}
 
-	// Create the extension within the new database
-	err = db.Exec("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"").Error
-	if err != nil {
-		return nil, err
-	} else {
-		log.Info().Msg("uuid-ossp extension created successfully")
+	if !isDatabaseExist {
+		// Create the extension within the new database
+		err = db.Exec("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"").Error
+		if err != nil {
+			return nil, err
+		} else {
+			log.Info().Msg("uuid-ossp extension created successfully")
+		}
 	}
 
 	// Migrate the schema
