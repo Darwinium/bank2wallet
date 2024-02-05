@@ -1,7 +1,6 @@
 package main
 
 import (
-	"flag"
 	"net/http"
 	"os"
 	"strings"
@@ -42,15 +41,14 @@ func init() {
 		Str("APP_ENV", os.Getenv("APP_ENV")).
 		Str("GIN_MODE", os.Getenv("GIN_MODE")).
 		Str("SERVER_URL", os.Getenv("SERVER_URL")).
+		Str("SERVER_PORT", os.Getenv("SERVER_PORT")).
 		Str("WEB_SERVICE_URL", os.Getenv("WEB_SERVICE_URL")).
 		Str("POSTGRES_HOST", os.Getenv("POSTGRES_HOST")).
 		Str("POSTGRES_USER", os.Getenv("POSTGRES_USER")).
 		Str("POSTGRES_DB", os.Getenv("POSTGRES_DB")).
-		Msg("Loaded Environment Variables")
+		Msg("Environment Variables")
 
-	port := flag.String("port", "8080", "Port to run the server on")
-	flag.Parse()
-	serverURL = os.Getenv("SERVER_URL") + ":" + *port
+	serverURL = os.Getenv("SERVER_URL") + ":" + os.Getenv("SERVER_PORT")
 
 	db, err = getDBConnection()
 	if err != nil {
@@ -168,7 +166,7 @@ func createPass(c *gin.Context) {
 		return
 	}
 
-	pkpassFilePath := serverURL + "/passes/" + pass.ID.String() + ".pkpass"
+	pkpassFilePath := os.Getenv("WEB_SERVICE_URL") + "/passes/" + pass.ID.String() + ".pkpass"
 	log.Debug().Msgf("Pass was created successfully!\nLink: %s\n", pkpassFilePath)
 
 	c.JSON(200, gin.H{
@@ -202,7 +200,7 @@ func getPass(c *gin.Context) {
 
 	c.JSON(200, gin.H{
 		"message":   "Pass was retrieved successfully",
-		"link":      serverURL + "/passes/" + pass.ID.String() + ".pkpass",
+		"link":      os.Getenv("WEB_SERVICE_URL") + "/passes/" + pass.ID.String() + ".pkpass",
 		"companyID": companyID,
 		"passID":    pass.ID,
 	})
@@ -259,7 +257,7 @@ func updateCashback(c *gin.Context) {
 
 	c.JSON(200, gin.H{
 		"message":   "Cashback was updated successfully",
-		"link":      serverURL + "/passes/" + pass.ID.String() + ".pkpass",
+		"link":      os.Getenv("WEB_SERVICE_URL") + "/passes/" + pass.ID.String() + ".pkpass",
 		"companyID": companyID,
 	})
 }
