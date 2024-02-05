@@ -57,6 +57,7 @@ func getDBConnection() (*gorm.DB, error) {
 	db.AutoMigrate(&Pass{}, &DeviceRegistration{})
 
 	return db, nil
+
 }
 
 // AddNewPass creates a new pass with the given data and saves it in the database. It returns the pass data
@@ -83,7 +84,7 @@ func AddNewPass(db *gorm.DB, companyID, cashback, companyName, iban, bic, addres
 	return pass, nil
 }
 
-// UpdatePassByCompanyID updates the cashback of the pass with the given companyID
+// UpdatePassByCompanyID updates the cashback balance of the pass with the given companyID
 func UpdatePassByCompanyID(db *gorm.DB, companyID, cashback string) (Pass, error) {
 	// Update cashback
 	var pass Pass
