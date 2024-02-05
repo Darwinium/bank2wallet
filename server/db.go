@@ -45,6 +45,7 @@ func getDBConnection() (*gorm.DB, error) {
 	dsn := "host=" + os.Getenv("POSTGRES_HOST") +
 		" user=" + os.Getenv("POSTGRES_USER") +
 		" password=" + os.Getenv("POSTGRES_PASSWORD") +
+		" dbname=postgres" +
 		" port=" + os.Getenv("POSTGRES_PORT") +
 		" sslmode=disable TimeZone=Etc/UTC"
 
@@ -53,18 +54,31 @@ func getDBConnection() (*gorm.DB, error) {
 		return nil, err
 	}
 
-	// Check if the database exists, and create it if it does not
-	err = db.Exec("CREATE DATABASE " + os.Getenv("POSTGRES_DB")).Error
+	databaseName := os.Getenv("POSTGRES_DB")
+
+	// Check if the database exists
+	var dbName string
+	err = db.Raw("SELECT datname FROM pg_database WHERE datname = ?", databaseName).Scan(&dbName).Error
 	if err != nil {
-		log.Info().Err(err).Msg("Database creation failed or it might already exist")
+		log.Error().Err(err).Msg("Failed to query database existence")
+	}
+
+	if dbName == "" {
+		// Database does not exist, attempt to create it
+		err = db.Exec(fmt.Sprintf("CREATE DATABASE %s", databaseName)).Error
+		if err != nil {
+			return nil, err
+		} else {
+			log.Info().Msgf("Database %s created successfully", databaseName)
+		}
 	} else {
-		log.Info().Msg("Database created successfully")
+		log.Info().Msgf("Database %s already exists, skipping creation", databaseName)
 	}
 
 	// Close the initial connection
 	sqlDB, err := db.DB()
 	if err != nil {
-		log.Error().Err(err).Msg("Failed to close the database")
+		return nil, err
 	}
 	sqlDB.Close()
 
@@ -72,6 +86,14 @@ func getDBConnection() (*gorm.DB, error) {
 	db, err = gorm.Open(postgres.Open(dsn), &gorm.Config{})
 	if err != nil {
 		return nil, err
+	}
+
+	// Create the extension within the new database
+	err = db.Exec("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"").Error
+	if err != nil {
+		return nil, err
+	} else {
+		log.Info().Msg("uuid-ossp extension created successfully")
 	}
 
 	// Migrate the schema
