@@ -9,3 +9,4 @@ certificates
 bank2wallet
 .vscode
 server/.env.docker
+ui/web/
