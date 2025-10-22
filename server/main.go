@@ -253,7 +253,7 @@ func updateCashback(c *gin.Context) {
 		log.Error().Err(err).Msg("Failed to generate new pass")
 	}
 
-	SendNotificationPushAboutUpdate()
+	SendNotificationPushAboutUpdate(db)
 
 	c.JSON(200, gin.H{
 		"message":   "Cashback was updated successfully",

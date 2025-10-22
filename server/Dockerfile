@@ -20,7 +20,7 @@ COPY go.sum /app/
 RUN mkdir -p /app/b2wData
 RUN mkdir -p /app/b2wData/tmp
 RUN mkdir -p /app/b2wData/passes
-# Define this derictory as a volume
+# Define this directory as a volume
 VOLUME ["/app/b2wData"]
 
 # Install OpenSSL
